@@ -2,7 +2,24 @@
 
 ## Instructions
 
-Read and follow `CLAUDE.md` in this repository for project-specific conventions.
+Read and follow, in this priority order:
+
+1. `Prompt.md` — **Operating doctrine.** Elite execution philosophy, self-improvement loop, consumer-product thinking, research-first execution, validation standards. Applies to ALL work.
+2. `CLAUDE.md` — Project-specific conventions (Python 3.9 compat, Pydantic v2 + FastAPI rules, line length, ruff config).
+3. The `.cursor/skills/` skills below auto-load when the description matches the task — they encode the doctrine in actionable form.
+
+### Default execution loop
+
+For ANY non-trivial task: **Research → Think → Plan → Build → Test → Verify → Validate → Reflect → Improve → Repeat.**
+Never stop at first working implementation. Iterate until the solution feels elegant, scalable, intuitive, and genuinely delightful.
+
+### Hard rules from doctrine
+
+- Never patch symptoms; solve root causes.
+- Never claim completion without proof (tests + UX walkthrough + edge cases + perf + accessibility).
+- Never ship MVP-level when a feature ecosystem is possible — think in systems, not screens.
+- Build for emotional satisfaction, not just functional correctness. "Would users love this?"
+- After every correction or failure, update `tasks/lessons.md`. Never repeat the same mistake twice.
 
 ## Skills
 

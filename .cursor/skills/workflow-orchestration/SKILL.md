@@ -5,6 +5,29 @@ description: Plan-mode-first execution and workflow orchestration. Automatically
 
 # Workflow Orchestration
 
+## The Default Execution Loop
+
+For ANY non-trivial task:
+
+> **Research → Think → Plan → Build → Test → Verify → Validate → Reflect → Improve → Repeat**
+
+Never stop at "it works." Iterate until the solution feels **elegant, scalable, intuitive, consumer-grade, and genuinely delightful**. Every iteration should improve UX, performance, architecture, clarity, reliability, or user satisfaction.
+
+| Step | Output |
+|------|--------|
+| Research | Competitor scan, prior art, modern UX patterns, constraints |
+| Think | Architecture options, tradeoffs, "is there a more elegant solution?" |
+| Plan | `tasks/todo.md` with milestones, risks, verification strategy |
+| Build | Atomic-per-logical-change commits, conventional commit messages |
+| Test | Unit + integration + edge cases — written before or with the code |
+| Verify | Run tests, lint, type-check, UX walkthrough, regression check |
+| Validate | "Would real users at scale love this?" Accessibility, perf, security |
+| Reflect | What worked, what didn't, what felt weak, what introduced risk |
+| Improve | Refactor weak areas, redesign hacky paths, polish UX |
+| Repeat | Next iteration — never accept first-pass quality as final |
+
+After every correction from the user, append a lesson to `tasks/lessons.md` (see `task-management-loop` skill). Never repeat the same mistake twice.
+
 ## Plan Mode Default
 
 For ANY non-trivial task, enter PLAN mode first (call `SwitchMode` with `target_mode_id: "plan"`).
