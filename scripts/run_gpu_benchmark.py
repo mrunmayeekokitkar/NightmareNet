@@ -47,7 +47,11 @@ def _set_seed(seed: int) -> None:
 def _load_data(train_samples: int, eval_samples: int) -> tuple[list[dict], list[dict]]:
     from datasets import load_dataset
 
-    raw = load_dataset("glue", "sst2")
+    # HF datasets 4.x requires a namespaced repo id; the bare "glue" alias was removed.
+    try:
+        raw = load_dataset("nyu-mll/glue", "sst2")
+    except Exception:
+        raw = load_dataset("glue", "sst2")
     train = raw["train"].shuffle(seed=42).select(range(min(train_samples, len(raw["train"]))))
     val = raw["validation"].select(range(min(eval_samples, len(raw["validation"]))))
     return list(train), list(val)
@@ -133,14 +137,35 @@ def _evaluate(
 
 
 def _build_distorter(distortion: str, strength: float):
-    from nightmarenet.distortions.registry import get_registry
+    """Build a fast distortion callable that skips the slow learned-adversarial path.
 
-    registry = get_registry()
+    The learned-adversarial DistilBERT loader is correct for production runs but
+    too slow for a benchmark sweep (per-call attention extraction). We disable it
+    via explicit config and rely on rule-based contradictions/ambiguity instead.
+    """
+    from nightmarenet.distortions import dream as dream_mod
+    from nightmarenet.distortions import nightmare as nightmare_mod
 
-    def fn(text: str) -> str:
-        return registry.apply(distortion, text, strength=strength, seed=42)
+    if distortion == "dream":
+        def fn_dream(text: str) -> str:
+            return dream_mod.distort(text, strength=strength, seed=42)
+        return fn_dream
 
-    return fn
+    # Nightmare with learned: 0 to avoid per-call model loading
+    cfg = {
+        "adversarial": {
+            "contradiction": 0.3,
+            "ambiguity": 0.3,
+            "cross_domain": 0.2,
+            "misleading_context": 0.2,
+            "learned": 0.0,
+        }
+    }
+
+    def fn_nightmare(text: str) -> str:
+        return nightmare_mod.distort(text, strength=strength, seed=42, config=cfg)
+
+    return fn_nightmare
 
 
 def _train_model(label: str, train: list[dict], val: list[dict], args: argparse.Namespace) -> dict:
@@ -157,13 +182,19 @@ def _train_model(label: str, train: list[dict], val: list[dict], args: argparse.
     t0 = time.time()
 
     if label == "baseline":
-        print(f"[{label}] wake epoch over {len(train)} examples (bs={args.batch_size}, amp={use_amp})")
+        print(
+            f"[{label}] wake epoch over {len(train)} examples "
+            f"(bs={args.batch_size}, amp={use_amp})"
+        )
         loss = _train_epoch(
             model, tokenizer, train, args.device, args.batch_size, args.lr, use_amp,
         )
         history = [{"phase": "wake", "loss": loss}]
     else:
-        print(f"[{label}] wake epoch over {len(train)} examples (bs={args.batch_size}, amp={use_amp})")
+        print(
+            f"[{label}] wake epoch over {len(train)} examples "
+            f"(bs={args.batch_size}, amp={use_amp})"
+        )
         wake_loss = _train_epoch(
             model, tokenizer, train, args.device, args.batch_size, args.lr, use_amp,
         )
@@ -286,8 +317,14 @@ def main() -> int:
     out_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
 
     print("\n=== SUMMARY ===")
-    print(f"Baseline       clean={baseline['clean_accuracy']:.4f}  avg_distorted={baseline['avg_distorted_accuracy']:.4f}")
-    print(f"NightmareNet   clean={nightmarenet['clean_accuracy']:.4f}  avg_distorted={nightmarenet['avg_distorted_accuracy']:.4f}")
+    print(
+        f"Baseline       clean={baseline['clean_accuracy']:.4f}  "
+        f"avg_distorted={baseline['avg_distorted_accuracy']:.4f}"
+    )
+    print(
+        f"NightmareNet   clean={nightmarenet['clean_accuracy']:.4f}  "
+        f"avg_distorted={nightmarenet['avg_distorted_accuracy']:.4f}"
+    )
     print(f"Robustness improvement: {improvement:+.4f}  ({relative_pct:+.2f}%)")
     print(f"Written: {out_path}")
     return 0
