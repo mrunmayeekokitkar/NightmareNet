@@ -4,7 +4,9 @@
 
 Read and follow, in this priority order:
 
-1. `Prompt.md` — **Operating doctrine.** Elite execution philosophy, self-improvement loop, consumer-product thinking, research-first execution, validation standards. Applies to ALL work.
+1. `Prompt.md` — **Operating doctrine** (two parts).
+   - **Part I — Execution doctrine:** elite engineering philosophy, self-improvement loop, research-first execution, validation standards.
+   - **Part II — Consumer product improvement:** Analyze → Critique → Reimagine → Stress Test → Improve → Refine cycle; five user perspectives (first-time, daily, power, mobile, impatient); AI-native opportunities scan; delight engineering. *Applies after every implementation — never stop at "it works."*
 2. `CLAUDE.md` — Project-specific conventions (Python 3.9 compat, Pydantic v2 + FastAPI rules, line length, ruff config).
 3. The `.cursor/skills/` skills below auto-load when the description matches the task — they encode the doctrine in actionable form.
 
