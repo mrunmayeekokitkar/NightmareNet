@@ -17,6 +17,7 @@ import { BenchmarkSuite } from "./BenchmarkSuite";
 import { CIIntegration } from "./CIIntegration";
 import { SettingsPanel } from "./SettingsPanel";
 import { OnboardingOverlay } from "./OnboardingOverlay";
+import { WhatsNew } from "./WhatsNew";
 import { KeyboardHelp } from "./KeyboardHelp";
 import { AskNightmareDock } from "./AskNightmareDock";
 import { ToastProvider, useToast } from "../ui/Toast";
@@ -144,7 +145,7 @@ function DashboardRootInner() {
 
           {section === "experiments" && (
             <motion.div variants={fadeIn}>
-              <ExperimentList />
+              <ExperimentList onSectionChange={navigate} />
             </motion.div>
           )}
 
@@ -231,6 +232,7 @@ function DashboardRootInner() {
       </AnimatePresence>
 
       <OnboardingOverlay onNavigate={navigate} />
+      <WhatsNew />
       <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <AskNightmareDock section={section} onNavigate={navigate} />
     </AppShell>
