@@ -20,6 +20,7 @@ tags:
   - name: auth
   - name: experiments
   - name: compliance
+  - name: copilot
 
 paths:
   /api/v1/health:
@@ -153,6 +154,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PipelineReportResponse"
+
+  /api/v1/copilot/ask:
+    post:
+      tags: [copilot]
+      operationId: askCopilot
+      summary: Ask NightmareNet copilot
+      description: |
+        Streaming context-aware copilot for the dashboard dock. The endpoint
+        auto-selects an LLM backend (OpenAI, Anthropic, or Azure OpenAI) when
+        the corresponding `*_API_KEY` env var is set and the SDK is
+        importable; otherwise it serves a deterministic heuristic answer
+        keyed by `section`. Both backends emit the same response shape so
+        clients never branch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CopilotAskRequest"
+      responses:
+        "200":
+          description: |
+            Either a Server-Sent Events stream (`stream=true`, default) or a
+            single JSON answer (`stream=false`).
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/CopilotSseStream"
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CopilotAskResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          description: Rate limit exceeded (20 req/min per IP).
 
   /api/v1/experiments:
     get:
@@ -312,6 +348,87 @@ components:
           type: string
         comparison:
           type: object
+
+    CopilotAskRequest:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Free-text question from the dashboard dock.
+        section:
+          type: string
+          enum:
+            - command-center
+            - experiments
+            - run-detail
+            - phases
+            - metrics
+            - robustness
+            - compare
+            - distortions
+            - audit
+            - benchmarks
+            - ci
+            - settings
+          default: command-center
+          description: Current dashboard section the user is viewing.
+        context:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Free-form runtime context (e.g. last_run_robustness).
+        stream:
+          type: boolean
+          default: true
+          description: If true, respond with SSE; otherwise return a JSON object.
+
+    CopilotSuggestion:
+      type: object
+      required: [label, action, detail]
+      properties:
+        label:
+          type: string
+        action:
+          type: string
+          description: Section key for navigation, e.g. "benchmarks".
+        detail:
+          type: string
+
+    CopilotAskResponse:
+      type: object
+      required: [answer, suggestions, model]
+      properties:
+        answer:
+          type: string
+        suggestions:
+          type: array
+          items:
+            $ref: "#/components/schemas/CopilotSuggestion"
+        model:
+          type: string
+          description: |
+            Backend identifier (e.g. `openai:gpt-4o-mini`, `anthropic:claude-3-5-haiku-latest`,
+            `azure:gpt-4o-mini`, or `heuristic`).
+
+    CopilotSseStream:
+      type: string
+      description: |
+        Newline-delimited Server-Sent Events. Each frame is a `data: <json>`
+        line followed by a blank line. Token events are emitted incrementally,
+        followed by a terminal `done` event.
+
+        Example:
+
+        ```
+        data: {"token": "Welcome"}
+
+        data: {"token": " back."}
+
+        data: {"done": true, "suggestions": [...], "model": "heuristic"}
+        ```
 
     ErrorResponse:
       type: object
