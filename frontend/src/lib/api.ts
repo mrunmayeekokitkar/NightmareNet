@@ -291,3 +291,104 @@ export function getPipelineReport(
     `/api/v1/pipeline/${runId}/report`,
   );
 }
+
+// --- Copilot ---
+
+export interface CopilotSuggestion {
+  label: string;
+  action: string;
+  detail: string;
+}
+
+export interface CopilotDoneEvent {
+  done: true;
+  suggestions: CopilotSuggestion[];
+  model: string;
+}
+
+export interface CopilotAskRequest {
+  question: string;
+  section: string;
+  context?: Record<string, unknown>;
+  stream?: boolean;
+}
+
+export type CopilotStreamEvent = { token: string } | CopilotDoneEvent;
+
+/**
+ * Stream a copilot answer as Server-Sent Events.
+ *
+ * Yields incremental `{ token }` chunks until the terminal
+ * `{ done, suggestions, model }` event. The same response shape is emitted
+ * by the heuristic and LLM backends, so consumers never branch.
+ *
+ * Throws on non-200 responses; callers should catch and degrade to a
+ * heuristic UI so the dock never appears broken.
+ */
+export async function* askCopilot(
+  question: string,
+  section: string,
+  context?: Record<string, unknown>,
+  signal?: AbortSignal,
+): AsyncGenerator<CopilotStreamEvent, void, void> {
+  const res = await fetch(`${getApiBase()}/api/v1/copilot/ask`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify({ question, section, context, stream: true }),
+    signal,
+  });
+  if (!res.ok) {
+    let detail = `Copilot error ${res.status}`;
+    try {
+      const body = await res.json();
+      detail = body.detail || body.error || detail;
+    } catch {
+      // body wasn't JSON; keep status code message
+    }
+    throw new Error(detail);
+  }
+  if (!res.body) {
+    throw new Error("Copilot returned no stream body");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE events are separated by a blank line ("\n\n"). Handle CRLF too.
+      let sepIdx = buffer.indexOf("\n\n");
+      while (sepIdx !== -1) {
+        const raw = buffer.slice(0, sepIdx);
+        buffer = buffer.slice(sepIdx + 2);
+        sepIdx = buffer.indexOf("\n\n");
+
+        for (const line of raw.split(/\r?\n/)) {
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload) continue;
+          try {
+            const evt = JSON.parse(payload) as CopilotStreamEvent;
+            yield evt;
+          } catch {
+            // ignore malformed events
+          }
+        }
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // ignored
+    }
+  }
+}
