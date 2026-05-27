@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Panel } from "./Panel";
 import { Badge } from "@/components/ui/Badge";
+import { SkeletonChart } from "@/components/ui/Skeleton";
 import { IconActivity, IconTrend } from "./icons";
 
 const LOSS_SERIES = [
@@ -48,12 +49,17 @@ function LossChart({ series, width = 600, height = 220 }: LineChartProps) {
     return { v, y: y(v) };
   });
 
-  let cumulativeIdx = 0;
-  const paths = series.map((s) => {
-    const startIdx = cumulativeIdx;
-    const points = s.values.map((v, i) => [x(startIdx + i), y(v)] as const);
-    cumulativeIdx += s.values.length;
-    const d = points.map(([px, py], i) => `${i === 0 ? "M" : "L"}${px.toFixed(1)} ${py.toFixed(1)}`).join(" ");
+  // Pre-compute each series' starting index without mutating during map; the
+  // react-hooks/immutability rule treats post-render reassignments as a smell.
+  const startIdxs = series.reduce<number[]>((acc, s, i) => {
+    const prev = i === 0 ? 0 : acc[i - 1] + series[i - 1].values.length;
+    acc.push(prev);
+    return acc;
+  }, []);
+  const paths = series.map((s, i) => {
+    const startIdx = startIdxs[i];
+    const points = s.values.map((v, j) => [x(startIdx + j), y(v)] as const);
+    const d = points.map(([px, py], j) => `${j === 0 ? "M" : "L"}${px.toFixed(1)} ${py.toFixed(1)}`).join(" ");
     return { ...s, d, startIdx };
   });
 
@@ -144,7 +150,11 @@ function RobustnessChart() {
   );
 }
 
-export function LiveMetrics() {
+export interface LiveMetricsProps {
+  loading?: boolean;
+}
+
+export function LiveMetrics({ loading = false }: LiveMetricsProps = {}) {
   const [tab, setTab] = useState<"loss" | "robustness">("loss");
   return (
     <Panel
@@ -159,9 +169,11 @@ export function LiveMetrics() {
               key={k}
               type="button"
               onClick={() => setTab(k)}
+              disabled={loading}
               className={[
                 "rounded px-2 py-1 text-[11px] cursor-pointer transition-colors",
                 tab === k ? "bg-white/[0.06] text-slate-100" : "text-slate-500 hover:text-slate-300",
+                loading ? "pointer-events-none opacity-50" : "",
               ].join(" ")}
             >
               {l}
@@ -170,7 +182,9 @@ export function LiveMetrics() {
         </div>
       }
     >
-      {tab === "loss" ? (
+      {loading ? (
+        <SkeletonChart height={220} />
+      ) : tab === "loss" ? (
         <>
           <LossChart series={LOSS_SERIES} />
           <div className="mt-3 flex flex-wrap items-center justify-center gap-3 text-[11px]">
@@ -200,22 +214,26 @@ export function LiveMetrics() {
           </div>
         </>
       )}
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {[
-          { label: "Steps", value: "1,024" },
-          { label: "Tokens", value: "204k" },
-          { label: "Throughput", value: "1.2 k/s" },
-          { label: "Wall time", value: "12m 04s" },
-        ].map((m) => (
-          <div key={m.label} className="rounded-md border border-white/[0.06] bg-white/[0.02] p-2 text-center">
-            <p className="text-[10px] uppercase tracking-widest text-slate-500">{m.label}</p>
-            <p className="mt-0.5 font-mono text-xs text-slate-100">{m.value}</p>
+      {!loading && (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              { label: "Steps", value: "1,024" },
+              { label: "Tokens", value: "204k" },
+              { label: "Throughput", value: "1.2 k/s" },
+              { label: "Wall time", value: "12m 04s" },
+            ].map((m) => (
+              <div key={m.label} className="rounded-md border border-white/[0.06] bg-white/[0.02] p-2 text-center">
+                <p className="text-[10px] uppercase tracking-widest text-slate-500">{m.label}</p>
+                <p className="mt-0.5 font-mono text-xs text-slate-100">{m.value}</p>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <Badge variant="outline" size="xs" className="mt-3">
-        SVG · live updates pending pipeline status hook
-      </Badge>
+          <Badge variant="outline" size="xs" className="mt-3">
+            SVG · live updates pending pipeline status hook
+          </Badge>
+        </>
+      )}
     </Panel>
   );
 }

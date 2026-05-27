@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Panel } from "./Panel";
 import { Badge } from "@/components/ui/Badge";
 import { CircularProgress, Progress } from "@/components/ui/Progress";
+import { SkeletonChart, SkeletonStatTile } from "@/components/ui/Skeleton";
 import {
   IconActivity,
   IconBenchmark,
@@ -100,7 +101,38 @@ function MiniSparkline({ values }: { values: number[] }) {
   );
 }
 
-export function CommandCenter() {
+export interface CommandCenterProps {
+  loading?: boolean;
+}
+
+export function CommandCenter({ loading = false }: CommandCenterProps = {}) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel
+          title="Command Center"
+          subtitle="Operational overview · last 24h"
+          icon={<IconHome size={14} />}
+          glow="neural"
+          className="lg:col-span-2"
+        >
+          <SkeletonStatTile />
+          <div className="mt-5">
+            <SkeletonChart height={180} />
+          </div>
+        </Panel>
+        <Panel
+          title="System Pulse"
+          subtitle="Live runtime telemetry"
+          icon={<IconActivity size={14} />}
+          glow="dream"
+        >
+          <SkeletonChart height={200} />
+        </Panel>
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <Panel
