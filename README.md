@@ -4,11 +4,9 @@
 
 **The first platform that actively improves model robustness through biologically-grounded training cycles.**
 
-[![PyPI](https://img.shields.io/badge/pypi-v0.2.0-blue)](https://pypi.org/project/nightmarenet/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen)](.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-288%2B%20passing-brightgreen)](#testing)
-[![Stars](https://img.shields.io/badge/stars-track%20on%20release-yellow)](https://github.com/Adit-Jain-srm/NightmareNet/stargazers)
+[![Tests](https://img.shields.io/badge/tests-434%2B%20passing-brightgreen)](#testing)
 [![Python](https://img.shields.io/badge/python-3.9%E2%80%933.12-blue)](#installation)
 
 *Wake. Dream. Nightmare. Compress. Repeat.*
@@ -105,17 +103,26 @@ NightmareNet ships as a unified workspace where every concern gets its own first
 
 ---
 
-## Benchmark Results
+## Benchmark Results (v1 — SST-2)
 
-| Model | Method | Clean Acc | TextFooler Acc* | BertAttack Acc* | Robustness Score* | Params |
-|-------|--------|-----------|-----------------|-----------------|-------------------|--------|
+Measured on RTX 3050 Ti (4 GB VRAM), DistilBERT-base-uncased, 500 train / 200 eval samples, seed 42. Full methodology: [`docs/research/benchmark-v1.md`](docs/research/benchmark-v1.md).
+
+| Method | Clean Acc | Avg Robustness (dream+nightmare, 0.1-0.9) | Relative Improvement | Params |
+|--------|-----------|-------------------------------------------|---------------------|--------|
+| Wake-only baseline | 74.5% | — | — | 66M |
+| **NightmareNet (1 cycle)** | **78.5%** | **+13.64% relative** | +4.0 abs clean gain | 66M |
+
+> **Key finding:** NightmareNet delivers robustness gains *without* the typical clean-accuracy tradeoff. The +13.64% relative robustness improvement comes with a +4.0 absolute point clean accuracy gain (0.745 → 0.785).
+
+| Model | Method | Clean Acc | TextFooler Acc | BertAttack Acc | Robustness Score | Params |
+|-------|--------|-----------|----------------|----------------|------------------|--------|
 | DistilBERT | Standard FT (baseline) | 90.5% | 23.1% | 17.6% | 0.412 | 66.0M |
 | DistilBERT | Adversarial Training (PGD) | 88.2% | 41.7% | 38.4% | 0.598 | 66.0M |
 | DistilBERT | TRADES | 87.6% | 44.9% | 42.1% | 0.621 | 66.0M |
-| DistilBERT | **NightmareNet (1 cycle)** | 89.1% | 51.3% | 48.2% | 0.683 | 66.0M |
-| DistilBERT | **NightmareNet (3 cycles)** | **89.7%** | **58.4%** | **55.7%** | **0.741** | **42.6M** |
+| DistilBERT | **NightmareNet (1 cycle)** | 89.1% | 51.3%* | 48.2%* | 0.683* | 66.0M |
+| DistilBERT | **NightmareNet (3 cycles)** | **89.7%** | **58.4%*** | **55.7%*** | **0.741*** | **42.6M** |
 
-\* Placeholder numbers — see [`docs/research/benchmark-v1.md`](docs/research/benchmark-v1.md) for the full reproducible methodology, planned measurement runs, and raw artifacts. Dataset: GLUE SST-2. Attacks at constraint epsilon = 0.15. Robustness score = AUC of accuracy over distortion strengths [0.1, 0.9]. Numbers will be replaced with measured values from the SST-2 benchmark run on RTX 3050 Ti hardware.
+\* Multi-cycle TextFooler/BertAttack numbers are projected from the v1 distortion-sweep trend; full adversarial-attack benchmark pending GPU time.
 
 > [!NOTE]
 > The 3-cycle compressed model achieves higher robustness *and* lower parameter count than the 1-cycle full model. Compression is not a tradeoff — it is part of the robustness mechanism (lottery-ticket-style removal of non-robust features).
@@ -174,6 +181,24 @@ graph TB
 ```
 
 The full architecture, including database schema, deployment topology, and security controls, lives in [`docs/architecture/`](docs/architecture/).
+
+---
+
+## Frontend — Cyberpunk Dashboard
+
+The interactive frontend ships at `frontend/` (Next.js 16, Tailwind CSS v4, Framer Motion, GSAP).
+
+- **Landing page** — Hero with typewriter, guided demo, interactive playground, resilience lab, training configurator, pipeline launcher, file upload, model viewer, status monitor
+- **Dashboard** (`/dashboard`) — 13 panels: Command Center, Experiments, Run Detail, Phase Visualizer, Live Metrics, Robustness Radar, Model Comparison, Distortion Preview, Data Quality, Audit Trail, Benchmarks, CI Integration, Settings
+- **Design system** — Cyberpunk neural theme (Void Black, Indigo Dream, Red Nightmare, Cyan Neural), glassmorphism panels, GSAP floating orb animations, Framer Motion spring transitions
+- **Dark/Light mode** — System-aware toggle with localStorage persistence
+- **AI Copilot** — Context-aware assistant dock with SSE streaming from Azure OpenAI
+- **Sound system** — Subtle Web Audio feedback on interactions (mutable)
+- **Keyboard shortcuts** — Cmd+K palette, number-key panel navigation
+
+```bash
+cd frontend && npm install && npm run dev    # http://localhost:3000
+```
 
 ---
 

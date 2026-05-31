@@ -105,16 +105,65 @@ export default function PipelineLab() {
   const [error, setError] = useState<string | null>(null);
   const [isLaunching, setIsLaunching] = useState(false);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
-  /* ── Cleanup polling on unmount ── */
+  /* ── Cleanup on unmount ── */
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
   }, []);
 
-  /* ── Poll status ── */
+  /* ── WebSocket live progress (with polling fallback) ── */
   const startPolling = useCallback((id: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/runs/${id}`;
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.error) {
+            setError(data.error);
+            return;
+          }
+          setPipelineStatus(data);
+          if (data.event === "complete" || !data.is_running) {
+            if (data.has_report) {
+              getPipelineReport(id).then(setReport).catch(() => {});
+              setStep("complete");
+            } else if (data.status === "failed") {
+              setError(data.error || "Pipeline failed.");
+            }
+            ws.close();
+            wsRef.current = null;
+          }
+        } catch { /* malformed message */ }
+      };
+
+      ws.onerror = () => {
+        ws.close();
+        wsRef.current = null;
+        startPollingFallback(id);
+      };
+
+      ws.onclose = () => { wsRef.current = null; };
+    } catch {
+      startPollingFallback(id);
+    }
+  }, []);
+
+  const startPollingFallback = useCallback((id: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {

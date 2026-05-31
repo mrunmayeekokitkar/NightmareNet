@@ -973,3 +973,48 @@ async def get_pipeline_report(run_id: str):
         comparison=metrics.comparison,
     )
 
+
+# ------------------------------------------------------------------
+# WebSocket live progress stream
+# ------------------------------------------------------------------
+
+@app.websocket("/ws/runs/{run_id}")
+async def websocket_pipeline_progress(websocket: "WebSocket", run_id: str):
+    """Stream live pipeline progress events over WebSocket.
+
+    Clients connect after calling /api/v1/pipeline/create and receive JSON
+    events as the pipeline progresses. Falls back gracefully if the run_id
+    is unknown or the pipeline completes before connection.
+    """
+    import asyncio
+
+    from starlette.websockets import WebSocket, WebSocketDisconnect
+
+    from nightmarenet.pipeline_runner import get_runner
+
+    await websocket.accept()
+
+    runner = get_runner(run_id)
+    if runner is None:
+        await websocket.send_json({"error": f"Run '{run_id}' not found"})
+        await websocket.close(code=4004)
+        return
+
+    try:
+        while True:
+            metrics = runner.status()
+            await websocket.send_json(metrics)
+
+            if not metrics.get("is_running", False):
+                await websocket.send_json({"event": "complete", "run_id": run_id})
+                break
+
+            await asyncio.sleep(1.0)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
+

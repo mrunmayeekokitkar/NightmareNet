@@ -5,12 +5,18 @@ const apiRewriteBase =
   process.env.NEXT_API_REWRITE_URL?.replace(/\/$/, "") ||
   "http://127.0.0.1:8000";
 
+const wsRewriteBase = apiRewriteBase.replace(/^http/, "ws");
+
 const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
         source: "/api/:path*",
         destination: `${apiRewriteBase}/api/:path*`,
+      },
+      {
+        source: "/ws/:path*",
+        destination: `${wsRewriteBase}/ws/:path*`,
       },
     ];
   },
