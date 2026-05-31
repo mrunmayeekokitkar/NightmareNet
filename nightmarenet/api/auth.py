@@ -29,6 +29,7 @@ _PUBLIC_PATHS = frozenset({
 # served at CDN-friendly cache durations without leaking API keys.
 _PUBLIC_PREFIXES: tuple = (
     "/api/v1/badge/",
+    "/ws/",
 )
 
 
@@ -49,19 +50,18 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
             )
 
     async def dispatch(self, request: Request, call_next) -> Response:
-        # Skip auth for public paths and prefixes
         path = request.url.path
         if path in _PUBLIC_PATHS:
             return await call_next(request)
         if any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES):
             return await call_next(request)
 
-        # Skip if auth is disabled (no key configured)
-        if not self.api_key:
+        active_key = os.environ.get("NIGHTMARENET_API_KEY") or self.api_key
+        if not active_key:
             return await call_next(request)
 
         provided_key = request.headers.get("X-API-Key")
-        if not provided_key or not hmac.compare_digest(provided_key, self.api_key):
+        if not provided_key or not hmac.compare_digest(provided_key, active_key):
             return JSONResponse(
                 status_code=401,
                 content={"error": "Unauthorized", "detail": "Invalid or missing API key."},

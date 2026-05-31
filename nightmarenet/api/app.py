@@ -978,8 +978,11 @@ async def get_pipeline_report(run_id: str):
 # WebSocket live progress stream
 # ------------------------------------------------------------------
 
+from starlette.websockets import WebSocket, WebSocketDisconnect  # noqa: E402
+
+
 @app.websocket("/ws/runs/{run_id}")
-async def websocket_pipeline_progress(websocket: "WebSocket", run_id: str):
+async def websocket_pipeline_progress(websocket: WebSocket, run_id: str):
     """Stream live pipeline progress events over WebSocket.
 
     Clients connect after calling /api/v1/pipeline/create and receive JSON
@@ -987,8 +990,6 @@ async def websocket_pipeline_progress(websocket: "WebSocket", run_id: str):
     is unknown or the pipeline completes before connection.
     """
     import asyncio
-
-    from starlette.websockets import WebSocket, WebSocketDisconnect
 
     from nightmarenet.pipeline_runner import get_runner
 
