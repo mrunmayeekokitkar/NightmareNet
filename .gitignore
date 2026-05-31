@@ -62,6 +62,7 @@ pyright_output.txt
 
 # Benchmark / experiment outputs
 results/
+!results/gpu_benchmark.json
 checkpoints/
 logs/
 
