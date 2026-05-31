@@ -15,6 +15,12 @@ import subprocess
 import time
 from typing import Any, Optional
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from nightmarenet import __version__
 
 logger = logging.getLogger(__name__)
