@@ -47,8 +47,8 @@ def cmd_train(args: argparse.Namespace) -> int:
 
     metrics = pipeline.metrics
     print("\nTraining complete!")
-    print(f"  Final loss: {metrics.final_loss:.4f}")
-    print(f"  Robustness score: {metrics.robustness_score:.4f}")
+    print(f"  Final loss: {metrics.phase_loss:.4f}")
+    print(f"  Status: {metrics.status}")
 
     if args.output:
         output_dir = Path(args.output)

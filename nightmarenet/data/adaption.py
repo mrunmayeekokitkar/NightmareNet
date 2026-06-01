@@ -15,7 +15,7 @@ import tempfile
 import time
 import uuid
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Generator, List, Optional, Set, Tuple, Union
+from typing import Any, Callable, Dict, FrozenSet, Generator, List, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
@@ -49,12 +49,12 @@ __all__ = ["Adaption", "AsyncAdaption", "AdaptionOptimizer"]
 _MAX_RETRIES = 3
 _RETRY_BACKOFF: Tuple[float, ...] = (1.0, 2.0, 4.0)
 
-_VALID_COLUMN_ROLES: Set[str] = frozenset({
+_VALID_COLUMN_ROLES: FrozenSet[str] = frozenset({
     "prompt", "completion", "instruction", "input", "output",
     "question", "answer", "context", "system", "text", "chat",
 })
 
-_VALID_LENGTHS: Set[str] = frozenset({
+_VALID_LENGTHS: FrozenSet[str] = frozenset({
     "minimal", "concise", "detailed", "extensive",
 })
 
