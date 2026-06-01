@@ -58,10 +58,10 @@ export default function RootLayout({
       className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="scanlines min-h-full flex flex-col bg-void text-text font-sans">
+      <body className="scanlines min-h-full flex flex-col bg-void text-text font-sans" suppressHydrationWarning>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('nightmarenet-theme');var d=document.documentElement;if(t==='light'){d.classList.add('light')}else{d.classList.add('dark')}}catch(e){d.classList.add('dark')}})()`,
+            __html: `(function(){try{var t=localStorage.getItem('nightmarenet-theme');var d=document.documentElement;if(t==='light'){d.classList.add('light')}else{d.classList.add('dark')}}catch(e){document.documentElement.classList.add('dark')}})()`,
           }}
         />
         <ThemeProvider>{children}</ThemeProvider>
