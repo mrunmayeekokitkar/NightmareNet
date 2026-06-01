@@ -28,8 +28,8 @@ scripts/                # CLI entry points
 ## Critical Build & Test Commands
 
 ```bash
-# Activate venv
-.venv\Scripts\Activate.ps1          # Windows
+# Activate venv (ALWAYS use .venv312 — Python 3.12 + CUDA)
+.venv312\Scripts\Activate.ps1       # Windows
 source .venv/bin/activate            # Unix
 
 # Run all tests
