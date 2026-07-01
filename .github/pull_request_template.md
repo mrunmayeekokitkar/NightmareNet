@@ -23,7 +23,13 @@ Closes #
 - [ ] Documentation
 - [ ] Tests
 
-## Checklist
+## Pre-submission Checklist
+
+- [ ] I have **starred** this repository
+- [ ] I have **followed** [@Adit-Jain-srm](https://github.com/Adit-Jain-srm)
+- [ ] I have read [CONTRIBUTING.md](https://github.com/Adit-Jain-srm/NightmareNet/blob/main/CONTRIBUTING.md)
+
+## Quality Checklist
 
 - [ ] `ruff check nightmarenet/ tests/` passes with 0 errors
 - [ ] `mypy nightmarenet/ --ignore-missing-imports` passes

@@ -4,14 +4,26 @@ Thank you for helping improve NightmareNet. This project uses a **research-first
 
 ---
 
+## Before You Start
+
+> **Please complete these steps before opening a Pull Request:**
+
+1. **Star this repository** — It helps us gauge community interest and prioritize features.
+2. **Follow [@Adit-Jain-srm](https://github.com/Adit-Jain-srm)** — Stay updated on releases, related projects, and research.
+3. **Read this entire guide** — PRs that don't follow the coding standards or skip tests will be asked to revise.
+
+---
+
 ## Table of Contents
 
-1. [Local development setup](#1-local-development-setup)
-2. [Architecture pointers (OSS core vs hosted platform)](#2-architecture-pointers)
-3. [Adding a new distortion](#3-adding-a-new-distortion)
-4. [Coding standards](#4-coding-standards)
-5. [PR checklist](#5-pr-checklist)
-6. [Where to ask for help](#6-where-to-ask-for-help)
+1. [Before you start](#before-you-start)
+2. [Local development setup](#1-local-development-setup)
+3. [Architecture pointers (OSS core vs hosted platform)](#2-architecture-pointers)
+4. [Adding a new distortion](#3-adding-a-new-distortion)
+5. [Coding standards](#4-coding-standards)
+6. [Documentation](#5-documentation)
+7. [PR checklist](#6-pr-checklist)
+8. [Where to ask for help](#7-where-to-ask-for-help)
 
 ---
 
@@ -206,10 +218,26 @@ Mirror the package layout under `tests/`. At minimum:
 
 ---
 
-## 5. PR checklist
+## 5. Documentation
+
+All PRs that change user-facing behavior **must** update relevant documentation:
+
+- **API changes** → Update `docs/api/` OpenAPI spec and relevant endpoint docs
+- **New features** → Add to `README.md` feature table + relevant section
+- **Config changes** → Update `configs/default.yaml` comments + `CLAUDE.md` if applicable
+- **Distortion changes** → Update the README distortion table + `docs/research/paper-draft.md`
+- **Frontend changes** → Update component inventory in README if adding panels
+- **Breaking changes** → Add migration note at the top of PR description
+
+Good documentation is as important as good code. If you're unsure what to update, ask in the PR description and we'll guide you.
+
+---
+
+## 6. PR checklist
 
 Before requesting review, confirm every box.
 
+- [ ] I have **starred the repo** and **followed [@Adit-Jain-srm](https://github.com/Adit-Jain-srm)**.
 - [ ] `pytest tests/ -v --tb=short` — green locally.
 - [ ] `ruff check .` — zero errors.
 - [ ] `mypy nightmarenet/` — no new errors.
@@ -218,8 +246,7 @@ Before requesting review, confirm every box.
 - [ ] No new `nightmarenet/` import of a hosted-only library (`sqlalchemy`, `redis`, `celery`, `psycopg2`, `stripe`).
 - [ ] New code is type-annotated; new public APIs have Google-style docstrings.
 - [ ] New distortions / metrics / phases are tested for determinism, edge inputs, and registry round-trip.
-- [ ] If the algorithm changed: `docs/research/paper-draft.md` and `docs/research/benchmark-v1.md` updated.
-- [ ] If a user-facing change: `README.md`, `CHANGELOG.md`, and any affected notebook in `notebooks/` updated.
+- [ ] Documentation updated (see [Section 5](#5-documentation)).
 - [ ] PR description includes:
   - one-paragraph summary
   - link to the issue / discussion
@@ -230,7 +257,7 @@ CI mirrors the local checks plus a security scan. Merging is blocked on a green 
 
 ---
 
-## 6. Where to ask for help
+## 7. Where to ask for help
 
 - **GitHub Discussions** — `https://github.com/Adit-Jain-srm/NightmareNet/discussions`
   - `q-and-a` for "how do I..." questions

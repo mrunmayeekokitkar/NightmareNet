@@ -1,0 +1,73 @@
+name: Welcome
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  welcome-issue:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const author = issue.user.login;
+
+            // Don't greet the maintainer
+            if (author === 'Adit-Jain-srm') return;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue.number,
+              body: `👋 Thanks for opening this issue, @${author}!
+
+            We'll triage it shortly. In the meantime:
+
+            - Please make sure you've checked existing [issues](https://github.com/Adit-Jain-srm/NightmareNet/issues) for duplicates.
+            - If this is a bug, include your Python version, OS, and a minimal reproduction.
+            - If this is a feature request, describe the problem it solves — not just the solution.
+
+            📖 **New contributors:** Check out our [Contributing Guide](https://github.com/Adit-Jain-srm/NightmareNet/blob/main/CONTRIBUTING.md) to get started.
+
+            ⭐ If you find NightmareNet useful, please consider starring the repo!`
+            });
+
+  welcome-pr:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+
+            // Don't greet the maintainer
+            if (author === 'Adit-Jain-srm') return;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: `🎉 Thanks for this PR, @${author}! We appreciate your contribution.
+
+            **Before we review, please confirm:**
+
+            - [ ] You've read the [Contributing Guide](https://github.com/Adit-Jain-srm/NightmareNet/blob/main/CONTRIBUTING.md)
+            - [ ] You've ⭐ starred the repo and followed [@Adit-Jain-srm](https://github.com/Adit-Jain-srm)
+            - [ ] All checks in the [PR checklist](https://github.com/Adit-Jain-srm/NightmareNet/blob/main/CONTRIBUTING.md#6-pr-checklist) are complete
+            - [ ] Documentation is updated (if applicable)
+
+            A maintainer will review this soon. If CI fails, check the logs — most issues are lint or type errors that are easy to fix locally.
+
+            🚀 Thank you for making NightmareNet better!`
+            });
