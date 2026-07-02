@@ -3,9 +3,6 @@ name: Deploy Frontend
 on:
   push:
     branches: [main]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/deploy-frontend.yml"
 
 jobs:
   deploy:
@@ -39,10 +36,5 @@ jobs:
           echo "Deployed to: $url"
           echo "DEPLOY_URL=$url" >> $GITHUB_ENV
 
-      - name: Comment deployment URL
-        if: github.event_name == 'push'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const url = process.env.DEPLOY_URL || 'https://frontend-aj5.vercel.app';
-            console.log(`Deployed to ${url}`);
+      - name: Log deployment
+        run: echo "Deployed to ${{ env.DEPLOY_URL || 'https://frontend-aj5.vercel.app' }}"
