@@ -388,6 +388,10 @@ Before requesting review, confirm every box.
   - link to the issue / discussion
   - **before / after** behavior (or numbers, when applicable)
   - any breaking change explicitly called out at the top.
+- [ ] **Acceptance criteria from the linked issue are copied into the PR description as a checklist.** Every criterion must be checked off before requesting review. If a criterion cannot be met in this PR, explain why in the description.
+
+> [!NOTE]
+> **Why acceptance criteria in the PR?** Issues define what "done" looks like. PRs prove it. Copying the acceptance criteria into your PR description creates a verifiable contract: reviewers check the boxes against your code, and incomplete implementations are caught before review begins (not after). If your PR only addresses a subset of the criteria, state that explicitly and link to a follow-up issue for the rest.
 
 CI mirrors the local checks plus a security scan. Merging is blocked on a green CI and one approving review.
 
