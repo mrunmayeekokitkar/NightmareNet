@@ -1,12 +1,15 @@
 """Transfer fine-tuning pipeline.
 
 Fine-tunes a foundation model on a downstream task with optional layer freezing.
+Supported architectures for layer freezing include:
+- BERT-like models (e.g., BERT, DistilBERT, RoBERTa) via `encoder.layer`
+- GPT-like models (e.g., GPT-2) via `transformer.h`
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 from torch.utils.data import DataLoader
@@ -14,6 +17,8 @@ from tqdm import tqdm
 from transformers import PreTrainedModel
 
 logger = logging.getLogger(__name__)
+
+
 
 
 class TransferFineTuner:
@@ -31,10 +36,14 @@ class TransferFineTuner:
         self.device = device
         self.scaler = scaler
 
-    def _freeze_layers(self, freeze_bottom_n: int) -> None:
-        """Freeze the bottom N layers of the backbone."""
+    def _freeze_layers(self, freeze_bottom_n: int) -> bool:
+        """Freeze the bottom N layers of the backbone.
+        
+        Supported architectures: BERT-like (encoder.layer) and GPT-like (transformer.h).
+        Returns True if layers were successfully found and frozen, False otherwise.
+        """
         if freeze_bottom_n <= 0:
-            return
+            return True
 
         # Simple heuristic for transformers architectures
         if hasattr(self.model, "base_model"):
@@ -60,8 +69,10 @@ class TransferFineTuner:
                     for param in layer.parameters():
                         param.requires_grad = True
             logger.info("Froze bottom %d layers of the backbone.", frozen)
+            return True
         else:
             logger.warning("Could not identify layers to freeze. Layer freezing skipped.")
+            return False
 
     def _unfreeze_all(self) -> None:
         """Unfreeze all parameters in the model."""
@@ -75,7 +86,8 @@ class TransferFineTuner:
         num_epochs: int,
         freeze_bottom_n: int = 0,
         unfreeze_after_epoch: int = 1,
-    ) -> dict[str, float]:
+        strict_layer_freezing: bool = False,
+    ) -> dict[str, Any]:
         """Run the fine-tuning loop.
 
         Args:
@@ -83,22 +95,30 @@ class TransferFineTuner:
             num_epochs: Number of epochs to train.
             freeze_bottom_n: Number of bottom layers to freeze.
             unfreeze_after_epoch: Epoch number (1-indexed) after which to unfreeze all layers.
+            strict_layer_freezing: If True, raise RuntimeError if layers to freeze are not found.
 
         Returns:
-            Dictionary with final loss and accuracy.
+            Dictionary with final loss, per-epoch losses, and layer freezing info.
         """
         self.model.to(self.device)
         self.model.train()
 
         total_loss = 0.0
         steps = 0
+        per_epoch_losses = []
+        layers_frozen = False
 
         for epoch in range(1, num_epochs + 1):
             if epoch == 1 and freeze_bottom_n > 0:
-                self._freeze_layers(freeze_bottom_n)
-            elif epoch > unfreeze_after_epoch and freeze_bottom_n > 0:
+                layers_frozen = self._freeze_layers(freeze_bottom_n)
+                if strict_layer_freezing and not layers_frozen:
+                    raise RuntimeError(
+                        "strict_layer_freezing is True, but could not identify "
+                        "layers to freeze for model architecture."
+                    )
+            elif epoch > unfreeze_after_epoch and freeze_bottom_n > 0 and layers_frozen:
                 self._unfreeze_all()
-                freeze_bottom_n = 0  # Only unfreeze once
+                layers_frozen = False  # Only unfreeze once
 
             logger.info("Starting fine-tuning epoch %d/%d", epoch, num_epochs)
             epoch_loss = 0.0
@@ -134,7 +154,15 @@ class TransferFineTuner:
 
             avg_epoch_loss = epoch_loss / len(dataloader)
             logger.info("Epoch %d average loss: %.4f", epoch, avg_epoch_loss)
+            per_epoch_losses.append(avg_epoch_loss)
             total_loss += epoch_loss
 
         avg_loss = total_loss / max(steps, 1)
-        return {"avg_loss": avg_loss}
+        final_epoch_loss = per_epoch_losses[-1] if per_epoch_losses else 0.0
+
+        return {
+            "avg_loss": avg_loss,
+            "final_epoch_loss": final_epoch_loss,
+            "per_epoch_losses": per_epoch_losses,
+            "layers_frozen": freeze_bottom_n > 0
+        }

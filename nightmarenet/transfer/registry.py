@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -14,7 +15,12 @@ from transformers import AutoModel, AutoTokenizer, PreTrainedModel, PreTrainedTo
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_FOUNDATION_DIR = Path.home() / ".nightmarenet" / "foundation"
+DEFAULT_FOUNDATION_DIR = Path(
+    os.getenv(
+        "NIGHTMARENET_FOUNDATION_DIR",
+        str(Path.home() / ".nightmarenet" / "foundation")
+    )
+)
 
 
 class FoundationRegistry:

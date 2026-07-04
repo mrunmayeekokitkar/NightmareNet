@@ -1,6 +1,7 @@
 """Head factory for downstream task transfer learning.
 
 Instantiates task-specific heads on top of robust foundation backbones.
+Supports layer freezing integration seamlessly for BERT-like and GPT-like architectures.
 """
 
 from __future__ import annotations
