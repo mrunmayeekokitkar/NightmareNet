@@ -135,10 +135,40 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 
 
 def cmd_benchmark(args: argparse.Namespace) -> int:
-    """Run standard robustness benchmarks."""
-    print(f"NightmareNet Benchmark Suite: {args.suite}")
-    print(f"  Model: {args.model}")
-    print("  This feature is under development.")
+    """Run robustness benchmarks."""
+    from nightmarenet.evaluation.ensemble_benchmark import EnsembleOrchestrator
+    from nightmarenet.evaluation.pareto_analysis import get_pareto_frontier
+    from nightmarenet.evaluation.degradation_curves import calculate_degradation_curves
+    from nightmarenet.evaluation.format_results import format_all
+    
+    if args.config:
+        print(f"NightmareNet Ensemble Benchmark Suite")
+        print(f"  Config: {args.config}")
+        print(f"  Output: {args.output}")
+        print()
+        
+        orchestrator = EnsembleOrchestrator(args.config)
+        results = orchestrator.run(timeout_seconds=300)
+        
+        # Analyze pareto frontier
+        pareto_front = get_pareto_frontier(results["models_summary"])
+        results["pareto_front"] = pareto_front
+        
+        # Calculate degradation curves
+        curves = calculate_degradation_curves(results["raw_results"])
+        results["degradation_curves"] = curves
+        
+        if args.output:
+            # We want json, csv, latex
+            # format_all reads 'models_summary' from results dict for table generation
+            format_all(results, formats=["json", "csv", "latex"], output_dir=args.output)
+            print(f"\nResults saved to {args.output}")
+            
+    else:
+        print(f"NightmareNet Benchmark Suite: {args.suite}")
+        print(f"  Model: {args.model}")
+        print("  This feature is under development. Please provide --config for ensemble benchmarking.")
+        
     return 0
 
 
@@ -204,6 +234,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--suite", default="standard", choices=["standard", "adversarial", "full"]
     )
     bench_parser.add_argument("--model", default="distilbert-base-uncased")
+    bench_parser.add_argument("--config", help="YAML config path for ensemble benchmarking")
+    bench_parser.add_argument("--output", help="Output directory for ensemble benchmark results")
 
     # distort
     distort_parser = subparsers.add_parser("distort", help="Apply distortion to text")
