@@ -34,12 +34,16 @@ def test_degradation_curve_aggregation():
     """Test aggregation of robustness scores into degradation curves."""
     raw_results = {
         "model_A": {
-            "strengths": [0.1, 0.5, 0.9],
-            "perplexities": [10.0, 50.0, 100.0]
+            "dream": {
+                "strengths": [0.1, 0.5, 0.9],
+                "accuracies": [10.0, 50.0, 100.0]
+            }
         },
         "model_B": {
-            "strengths": [0.1, 0.5],
-            "perplexities": [5.0, 20.0]
+            "dream": {
+                "strengths": [0.1, 0.5],
+                "accuracies": [5.0, 20.0]
+            }
         }
     }
 
@@ -87,8 +91,12 @@ def test_ensemble_orchestrator_logic(mock_executor_class):
         "robustness": 0.99,
         "latency": 1.5,
         "params": 1000,
-        "strengths": [0.1, 0.5],
-        "perplexities": [5.0, 10.0],
+        "results_by_distortion": {
+            "dream": {
+                "strengths": [0.1, 0.5],
+                "accuracies": [5.0, 10.0]
+            }
+        }
     }
 
     mock_executor = mock.MagicMock()
