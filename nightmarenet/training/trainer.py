@@ -119,10 +119,12 @@ class Trainer:
         self.compression_config = config.get("compression", {})
 
         # Load model and tokenizer
+        resume_from = self.training_config.get("resume_from")
         model_name = self.model_config.get("name", "gpt2")
         self.model_type = self.model_config.get("type", "causal_lm")
+        model_load_path = resume_from if resume_from else model_name
         if model is None:
-            logger.info("Loading model: %s (type=%s)", model_name, self.model_type)
+            logger.info("Loading model: %s (type=%s)", model_load_path, self.model_type)
             model_cls = _MODEL_TYPE_MAP.get(self.model_type)
             if model_cls is None:
                 raise ValueError(
@@ -133,15 +135,17 @@ class Trainer:
                 kwargs = {}
                 if self.model_type == "seq_classification":
                     kwargs["num_labels"] = self.model_config.get("num_labels", 2)
-                self.model = model_cls.from_pretrained(model_name, **kwargs)
+                self.model = model_cls.from_pretrained(model_load_path, **kwargs)
             except Exception as exc:
-                raise RuntimeError(f"Failed to load model '{model_name}': {exc}") from exc
+                raise RuntimeError(f"Failed to load model '{model_load_path}': {exc}") from exc
         else:
             self.model = model
         self.model.to(self.device)
 
         if tokenizer is None:
-            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            has_resume = resume_from and os.path.exists(resume_from)
+            tokenizer_load_path = resume_from if has_resume else model_name
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_load_path)
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
         else:
@@ -240,7 +244,17 @@ class Trainer:
         else:
             self.model.save_pretrained(path)
         self.tokenizer.save_pretrained(path)
-        logger.info("Checkpoint saved: %s", path)
+
+        # Save training state
+        state = {
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "scaler_state_dict": self.scaler.state_dict() if self.scaler is not None else None,
+            "cycle": cycle,
+            "phase": phase,
+            "history": self.history,
+        }
+        torch.save(state, os.path.join(path, "training_state.pt"))
+        logger.info("Checkpoint saved: %s (including training state)", path)
 
     def _save_history(self):
         """Save training history to a JSON file."""
@@ -296,6 +310,40 @@ class Trainer:
         current_phase = "init"
         total_phases = max(len(self.scheduler), 1)
         completed_phases = 0
+
+        # Load training state if resuming
+        resume_from = self.training_config.get("resume_from")
+        if resume_from:
+            state_path = os.path.join(resume_from, "training_state.pt")
+            if os.path.exists(state_path):
+                logger.info("Resuming training state from %s", state_path)
+                state = torch.load(state_path, map_location=self.device)
+                self.optimizer.load_state_dict(state["optimizer_state_dict"])
+                if self.scaler is not None and state.get("scaler_state_dict") is not None:
+                    self.scaler.load_state_dict(state["scaler_state_dict"])
+                self.history = state.get("history", [])
+                completed_phases = len(self.history)
+
+                start_cycle = state.get("cycle", 0)
+                start_phase = state.get("phase")
+                if start_phase:
+                    if hasattr(self.scheduler, "base_scheduler"):
+                        self.scheduler.base_scheduler.start_cycle = start_cycle
+                        self.scheduler.base_scheduler.start_phase = start_phase
+                    else:
+                        self.scheduler.start_cycle = start_cycle
+                        self.scheduler.start_phase = start_phase
+                    logger.info(
+                        "Scheduler configured to resume after cycle %d, phase %s",
+                        start_cycle,
+                        start_phase,
+                    )
+            else:
+                logger.warning(
+                    "resume_from path specified but training_state.pt not found: %s",
+                    state_path,
+                )
+
         try:
             for cycle, phase, num_epochs in self.scheduler:
                 if self._interrupted:
@@ -342,6 +390,8 @@ class Trainer:
                         self._create_reference_model()
 
                 elif phase == "dream":
+                    if self.reference_model is None:
+                        self._create_reference_model()
                     dream_runner = DreamPhase(
                         model=self.model,
                         optimizer=self.optimizer,
@@ -427,7 +477,6 @@ class Trainer:
                     has_pressure = check_vram_pressure(device_idx, threshold=0.85)
                     if not getattr(self, "_vram_alert_sent", False) and has_pressure:
                         self._vram_alert_sent = True
-                        import torch
                         try:
                             free, total = torch.cuda.mem_get_info(device_idx)
                             used = total - free

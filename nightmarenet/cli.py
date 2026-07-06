@@ -30,6 +30,11 @@ def cmd_train(args: argparse.Namespace) -> int:
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
+    if getattr(args, "resume", None):
+        if "training" not in config:
+            config["training"] = {}
+        config["training"]["resume_from"] = args.resume
+
     def on_event(event: dict) -> None:
         phase = event.get("status", "unknown")
         print(f"  [{phase}] {event.get('message', '')}")
@@ -414,6 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--config", required=True, help="YAML config path")
     train_parser.add_argument("--output", help="Output directory for artifacts")
     train_parser.add_argument("--device", default="cpu", help="Device (cpu/cuda)")
+    train_parser.add_argument("--resume", help="Path to checkpoint directory to resume from")
 
     # evaluate
     eval_parser = subparsers.add_parser("evaluate", help="Evaluate model robustness")
