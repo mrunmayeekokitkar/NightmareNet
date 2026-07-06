@@ -22,6 +22,7 @@ from nightmarenet.evaluation.metrics import quick_robustness_score
 from nightmarenet.training.trainer import Trainer, _tokenize_dataset
 from nightmarenet.utils.config import load_config
 from nightmarenet.utils.telemetry import record_metric, setup_telemetry, trace_phase
+from nightmarenet.utils.webhooks import trigger_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -96,9 +97,16 @@ class Pipeline:
         self,
         config: dict,
         on_event: Optional[Callable[[dict], None]] = None,
+        run_id: Optional[str] = None,
+        distributed: Optional[str] = None,
+        resume_dir: Optional[str] = None,
     ) -> None:
+        import uuid
+        self.run_id = run_id or str(uuid.uuid4())
         self.config = config
         self.on_event = on_event
+        self.distributed = distributed
+        self.resume_dir = resume_dir
         self.metrics = PipelineMetrics()
         self._cancelled = False
 
@@ -140,6 +148,18 @@ class Pipeline:
         self.metrics.status = PipelineStatus.FAILED
         self.metrics.error = error
         self._emit()
+
+        trigger_webhook(
+            self.config,
+            "run_complete",
+            "Pipeline run failed.",
+            {
+                "run_id": self.run_id,
+                "status": "failed",
+                "error": error,
+                "model": self.config.get("model", {}).get("name", "unknown"),
+            },
+        )
 
     def _handle_cycle_end(self, event: dict) -> None:
         """Handle adaptive convergence detection after each training cycle."""
@@ -456,7 +476,12 @@ class Pipeline:
                 nightmare_data = nightmare_gen.generate(nightmare_base)
 
                 # Create trainer (loads model + tokenizer)
-                self._trainer = Trainer(config=self.config)
+                self._trainer = Trainer(
+                    config=self.config,
+                    distributed=self.distributed,
+                    resume_dir=self.resume_dir,
+                )
+                self._trainer.run_id = self.run_id
 
                 # Snapshot baseline model weights for later evaluation
                 self._baseline_model = copy.deepcopy(self._trainer.model)
@@ -640,12 +665,60 @@ class Pipeline:
 
                 self._compute_quality_feedback(comparison)
 
+                # Trigger webhook for run_complete (success)
+                robustness_metric = comparison.get("metrics", {}).get("robustness", {})
+                robustness_delta = robustness_metric.get("deltas", {}).get("auc_robustness")
+                if robustness_delta is None:
+                    robustness_delta = comparison.get("robustness_delta")
+
+                trigger_webhook(
+                    self.config,
+                    "run_complete",
+                    "Pipeline run completed successfully.",
+                    {
+                        "run_id": self.run_id,
+                        "status": "complete",
+                        "model": self.config.get("model", {}).get("name", "unknown"),
+                        "robustness_delta": (
+                            f"{robustness_delta:+.4f}"
+                            if isinstance(robustness_delta, float)
+                            else "N/A"
+                        ),
+                    },
+                )
+
+                # Trigger webhook for regression_detected
+                if isinstance(robustness_delta, (int, float)) and robustness_delta < 0:
+                    baseline_auc = (
+                        robustness_metric.get("baseline", {})
+                        .get("auc_robustness", "N/A")
+                    )
+                    trained_auc = (
+                        robustness_metric.get("trained", {})
+                        .get("auc_robustness", "N/A")
+                    )
+                    trigger_webhook(
+                        self.config,
+                        "regression_detected",
+                        (
+                            "Robustness regression detected after training! "
+                            f"Drop: {robustness_delta:+.4f}"
+                        ),
+                        {
+                            "run_id": self.run_id,
+                            "model": self.config.get("model", {}).get("name", "unknown"),
+                            "robustness_delta": f"{robustness_delta:+.4f}",
+                            "baseline_auc": baseline_auc,
+                            "trained_auc": trained_auc,
+                        },
+                    )
+
                 # Export robustness delta as an OTel metric
-                robustness_delta = comparison.get("robustness_delta")
-                if robustness_delta is not None:
+                robustness_delta_val = comparison.get("robustness_delta")
+                if robustness_delta_val is not None:
                     record_metric(
                         "robustness_score",
-                        float(robustness_delta),
+                        float(robustness_delta_val),
                         {"model": self.config.get("model", {}).get("name", "unknown")},
                     )
 

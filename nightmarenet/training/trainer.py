@@ -16,6 +16,7 @@ import threading
 from typing import Any, Callable, Optional
 
 import torch
+import torch.distributed as dist
 from datasets import IterableDataset
 from torch.utils.data import DataLoader
 from transformers import (
@@ -25,7 +26,11 @@ from transformers import (
     AutoTokenizer,
 )
 
-from nightmarenet.training.distributed import DistributedContext
+from nightmarenet.distributed.checkpoint import AtomicCheckpointer
+from nightmarenet.distributed.ddp_wrapper import DDPWrapper
+from nightmarenet.distributed.device_pool import DevicePool
+from nightmarenet.distributed.resume import ResumeManager
+from nightmarenet.distributed.strategies import apply_phase_strategy
 from nightmarenet.training.phases import (
     CompressionPhase,
     DreamPhase,
@@ -34,6 +39,7 @@ from nightmarenet.training.phases import (
 )
 from nightmarenet.training.scheduler import create_scheduler_from_config
 from nightmarenet.utils.tracking import create_tracker_from_config
+from nightmarenet.utils.webhooks import check_vram_pressure, trigger_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +116,8 @@ class Trainer:
         config: dict,
         model=None,
         tokenizer=None,
+        distributed: Optional[str] = None,
+        resume_dir: Optional[str] = None,
     ):
         self.config = config
         self.device = _get_device(config)
@@ -195,22 +203,38 @@ class Trainer:
         self.log_dir = self.training_config.get("log_dir", "logs")
         os.makedirs(self.log_dir, exist_ok=True)
 
-        # Distributed training context
-        distributed_cfg = self.training_config.get("distributed", False)
-        amp_mode = "fp16" if self.use_amp else "no"
-        self.dist_ctx = DistributedContext(
-            enabled=distributed_cfg,
-            mixed_precision=amp_mode,
-            gradient_accumulation_steps=self.training_config.get(
-                "gradient_accumulation_steps", 1
-            ),
-        )
+        # Distributed multi-GPU setup
+        override_devices = None
+        if distributed and distributed != "auto":
+            override_devices = [int(x.strip()) for x in distributed.split(",")]
+        self.device_pool = DevicePool(override_devices=override_devices)
+        self.ddp_wrapper = DDPWrapper()
 
-        # Experiment tracker (only on main process to avoid duplicates)
-        if self.dist_ctx.is_main_process:
+        if self.device_pool.should_use_ddp():
+            self.ddp_wrapper.setup()
+
+        # Checkpointer and Resume
+        self.checkpointer = AtomicCheckpointer(self.checkpoint_dir)
+        self.resume_manager = ResumeManager(resume_dir) if resume_dir else None
+
+        # Load from resume if provided
+        if self.resume_manager:
+            metadata = self.resume_manager.verify_and_load(self.model, self.optimizer, self.config)
+            self._start_cycle = metadata.get("cycle", 0)
+            self._start_phase = metadata.get("phase", None)
+            logger.info(f"Resuming from cycle {self._start_cycle}, phase {self._start_phase}")
+        else:
+            self._start_cycle = 0
+            self._start_phase = None
+
+        # Experiment tracker (only on main process)
+        if not (dist.is_available() and dist.is_initialized()) or dist.get_rank() == 0:
             self.tracker = create_tracker_from_config(config)
         else:
             self.tracker = create_tracker_from_config({})
+
+        self.run_id = None
+        self._vram_alert_sent = False
 
     def _create_reference_model(self) -> None:
         """Create a frozen copy of the current model for KL regularization."""
@@ -234,17 +258,26 @@ class Trainer:
         """Save a model checkpoint after a phase."""
         if not self.training_config.get("save_every_phase", True):
             return
-        if not self.dist_ctx.is_main_process:
+        if dist.is_available() and dist.is_initialized() and dist.get_rank() != 0:
             return
 
-        path = os.path.join(self.checkpoint_dir, f"cycle{cycle}_{phase}")
-        os.makedirs(path, exist_ok=True)
-        if self.dist_ctx.enabled:
-            self.dist_ctx.save_model(self.model, path)
-        else:
-            self.model.save_pretrained(path)
-        self.tokenizer.save_pretrained(path)
-        logger.info("Checkpoint saved: %s", path)
+        run_id_to_use = getattr(self, "run_id", "default_run")
+        if not run_id_to_use:
+            run_id_to_use = "default_run"
+
+        metrics = self.history[-1] if self.history else None
+        devices_used = self.device_pool.available_devices if hasattr(self, "device_pool") else []
+
+        self.checkpointer.save(
+            run_id=run_id_to_use,
+            cycle=cycle,
+            phase=phase,
+            model=self.model,
+            optimizer=self.optimizer,
+            config=self.config,
+            metrics=metrics,
+            devices_used=devices_used
+        )
 
     def _save_history(self):
         """Save training history to a JSON file."""
@@ -276,20 +309,7 @@ class Trainer:
         logger.info("Device: %s", self.device)
         self.tracker.log_config(self.config)
 
-        # Prepare model/optimizer/dataloaders for distributed training
-        if self.dist_ctx.enabled:
-            loaders = [train_dataloader, dream_dataloader, nightmare_dataloader]
-            if val_dataloader is not None:
-                loaders.append(val_dataloader)
-            prepared = self.dist_ctx.prepare(self.model, self.optimizer, *loaders)
-            self.model = prepared[0]
-            self.optimizer = prepared[1]
-            train_dataloader = prepared[2]
-            dream_dataloader = prepared[3]
-            nightmare_dataloader = prepared[4]
-            if val_dataloader is not None:
-                val_dataloader = prepared[5]
-            self.device = self.dist_ctx.device
+        # Native distributed logic is applied per-phase via apply_phase_strategy
 
         prev_handler = None
         if threading.current_thread() is threading.main_thread():
@@ -302,6 +322,25 @@ class Trainer:
         completed_phases = 0
         try:
             for cycle, phase, num_epochs in self.scheduler:
+                if cycle < getattr(self, "_start_cycle", 0):
+                    logger.info(f"Skipping cycle {cycle} (resuming from {self._start_cycle})")
+                    continue
+
+                if cycle == getattr(self, "_start_cycle", 0):
+                    start_phase = getattr(self, "_start_phase", None)
+                    if start_phase and not getattr(self, "_resume_caught_up", False):
+                        if phase != start_phase:
+                            logger.info(
+                                f"Skipping phase {phase} in cycle {cycle} (already completed)"
+                            )
+                            continue
+                        else:
+                            logger.info(
+                                f"Skipping phase {phase} in cycle {cycle} (already completed)"
+                            )
+                            self._resume_caught_up = True
+                            continue
+
                 if self._interrupted:
                     break
 
@@ -335,9 +374,16 @@ class Trainer:
 
                 result: dict
 
+                phase_model = apply_phase_strategy(
+                    phase=phase,
+                    model=self.model,
+                    device_pool=self.device_pool,
+                    ddp_wrapper=self.ddp_wrapper
+                )
+
                 if phase == "wake":
                     wake_runner = WakePhase(
-                        model=self.model,
+                        model=phase_model,
                         optimizer=self.optimizer,
                         config=self.training_config,
                         device=self.device,
@@ -351,7 +397,7 @@ class Trainer:
 
                 elif phase == "dream":
                     dream_runner = DreamPhase(
-                        model=self.model,
+                        model=phase_model,
                         optimizer=self.optimizer,
                         config=self.training_config,
                         device=self.device,
@@ -364,7 +410,7 @@ class Trainer:
                 elif phase == "nightmare":
                     lr_multiplier = self.training_config.get("nightmare_lr_multiplier", 2.0)
                     nightmare_runner = NightmarePhase(
-                        model=self.model,
+                        model=phase_model,
                         optimizer=self.optimizer,
                         config=self.training_config,
                         device=self.device,
@@ -375,7 +421,7 @@ class Trainer:
 
                 elif phase == "compress":
                     compress_runner = CompressionPhase(
-                        model=self.model,
+                        model=phase_model,
                         config=self.compression_config,
                         device=self.device,
                         scaler=self.scaler,
@@ -429,6 +475,35 @@ class Trainer:
                 # Save checkpoint
                 self._save_checkpoint(cycle, phase)
 
+                # Check GPU VRAM pressure
+                if self.device.type == "cuda":
+                    device_idx = self.device.index if self.device.index is not None else 0
+                    has_pressure = check_vram_pressure(device_idx, threshold=0.85)
+                    if not getattr(self, "_vram_alert_sent", False) and has_pressure:
+                        self._vram_alert_sent = True
+                        import torch
+                        try:
+                            free, total = torch.cuda.mem_get_info(device_idx)
+                            used = total - free
+                            pct = (used / total) * 100.0
+                            gpu_name = torch.cuda.get_device_name(device_idx)
+                            trigger_webhook(
+                                self.config,
+                                "alert",
+                                f"GPU VRAM pressure detected: {pct:.1f}% used on {gpu_name}.",
+                                {
+                                    "run_id": getattr(self, "run_id", "unknown"),
+                                    "gpu": gpu_name,
+                                    "used_vram": f"{used / (1024**2):.1f} MB",
+                                    "total_vram": f"{total / (1024**2):.1f} MB",
+                                    "usage_percent": f"{pct:.1f}%",
+                                    "cycle": cycle + 1,
+                                    "phase": phase,
+                                }
+                            )
+                        except Exception as e:
+                            logger.warning("Failed to record VRAM alert details: %s", e)
+
                 # Log metrics
                 logger.info("Phase result: %s", json.dumps(result, indent=2, default=str))
 
@@ -457,16 +532,17 @@ class Trainer:
         # Save final model and history
         final_path = os.path.join(self.checkpoint_dir, "final")
         os.makedirs(final_path, exist_ok=True)
-        if self.dist_ctx.enabled:
-            self.dist_ctx.wait_for_everyone()
-            self.dist_ctx.save_model(self.model, final_path)
-            if self.dist_ctx.is_main_process:
-                self.tokenizer.save_pretrained(final_path)
-                self._save_history()
-        else:
+
+        if dist.is_available() and dist.is_initialized():
+            dist.barrier()
+
+        if not (dist.is_available() and dist.is_initialized()) or dist.get_rank() == 0:
             self.model.save_pretrained(final_path)
             self.tokenizer.save_pretrained(final_path)
             self._save_history()
+
+        if dist.is_available() and dist.is_initialized():
+            self.ddp_wrapper.teardown()
 
         self.tracker.finish()
         logger.info("Training complete. Final model saved to %s", final_path)
