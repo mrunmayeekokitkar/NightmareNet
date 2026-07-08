@@ -70,7 +70,8 @@ class DistortionRegistry:
         except TypeError:
             # Python < 3.10 compatibility
             try:
-                eps = importlib.metadata.entry_points().get("nightmarenet.distortions", [])
+                all_eps = importlib.metadata.entry_points()
+                eps = all_eps.get("nightmarenet.distortions", [])  # type: ignore[arg-type]
             except Exception:
                 eps = []
 

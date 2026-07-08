@@ -18,6 +18,8 @@ from nightmarenet.distortions.validators import (
 def test_validate_distortion_contract_valid() -> None:
     """Test contract validation with a valid function."""
     def valid_distort(text: str, strength: float, seed: int = None) -> str:
+        if strength == 0.0:
+            return text
         return text.upper()
 
     failures = validate_distortion_contract(valid_distort)
@@ -49,7 +51,6 @@ def test_validate_distortion_contract_determinism() -> None:
     import random
 
     def invalid_distort(text: str, strength: float, seed: int = None) -> str:
-        random.seed(seed)
         return text + str(random.random())
 
     failures = validate_distortion_contract(invalid_distort)
