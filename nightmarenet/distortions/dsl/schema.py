@@ -1,12 +1,13 @@
 """Pydantic schema for distortion chain configuration validation."""
 
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field, field_validator
 
 
 class Defaults(BaseModel):
     """Default configuration values for the chain."""
-    
+
     seed: int = 42
     preserve_length: bool = False
     max_retries: int = 3
@@ -14,19 +15,19 @@ class Defaults(BaseModel):
 
 class ChainStep(BaseModel):
     """A single step in a distortion chain."""
-    
+
     engine: str = Field(..., description="Name of the distortion engine to apply")
     strength: float = Field(..., ge=0.0, le=1.0, description="Strength of distortion (0-1)")
     description: Optional[str] = Field(None, description="Human-readable description of this step")
     condition: Optional[str] = Field(
         "always",
-        description="Condition for applying this step (e.g., 'strength > 0.5', 'always')"
+        description="Condition for applying this step (e.g., 'strength > 0.5', 'always')",
     )
     config: Optional[Dict[str, Any]] = Field(
         default_factory=dict,
-        description="Additional engine-specific configuration"
+        description="Additional engine-specific configuration",
     )
-    
+
     @field_validator("condition")
     @classmethod
     def validate_condition(cls, v: Optional[str]) -> str:
@@ -47,13 +48,17 @@ class ChainStep(BaseModel):
 
 class ChainConfig(BaseModel):
     """Complete distortion chain configuration."""
-    
+
     name: str = Field(..., description="Name of the distortion chain")
     description: Optional[str] = Field(None, description="Human-readable description")
     version: int = Field(1, ge=1, description="Configuration version")
-    chain: List[ChainStep] = Field(..., min_length=1, description="Ordered list of distortion steps")
+    chain: List[ChainStep] = Field(
+        ...,
+        min_length=1,
+        description="Ordered list of distortion steps",
+    )
     defaults: Defaults = Field(default_factory=Defaults, description="Default configuration values")
-    
+
     @field_validator("chain")
     @classmethod
     def validate_chain_not_empty(cls, v: List[ChainStep]) -> List[ChainStep]:

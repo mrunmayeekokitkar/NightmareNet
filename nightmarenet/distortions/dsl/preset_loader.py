@@ -15,7 +15,7 @@ DEFAULT_PRESET_DIRS = [
 
 def get_preset_dirs() -> List[Path]:
     """Get list of directories to search for preset files.
-    
+
     Returns:
         List of directory paths that may contain preset YAML files
     """
@@ -28,16 +28,16 @@ def get_preset_dirs() -> List[Path]:
 
 def discover_presets(preset_dirs: List[Path] = None) -> List[Path]:
     """Discover all preset YAML files in the preset directories.
-    
+
     Args:
         preset_dirs: Optional list of directories to search. If None, uses default dirs.
-        
+
     Returns:
         List of paths to preset YAML files
     """
     if preset_dirs is None:
         preset_dirs = get_preset_dirs()
-    
+
     presets = []
     for dir_path in preset_dirs:
         if not dir_path.exists():
@@ -46,22 +46,22 @@ def discover_presets(preset_dirs: List[Path] = None) -> List[Path]:
             presets.append(yaml_file)
         for yaml_file in dir_path.glob("*.yml"):
             presets.append(yaml_file)
-    
+
     return sorted(presets)
 
 
 def list_presets(preset_dirs: List[Path] = None) -> List[dict]:
     """List all available presets with metadata.
-    
+
     Args:
         preset_dirs: Optional list of directories to search. If None, uses default dirs.
-        
+
     Returns:
         List of dictionaries with preset metadata (name, description, path, version)
     """
     preset_files = discover_presets(preset_dirs)
     presets_info = []
-    
+
     for preset_path in preset_files:
         try:
             config = parse_chain_config(preset_path, validate_engines=False)
@@ -75,42 +75,42 @@ def list_presets(preset_dirs: List[Path] = None) -> List[dict]:
         except Exception:
             # Skip invalid presets when listing
             continue
-    
+
     return presets_info
 
 
 def load_preset(name: str, preset_dirs: List[Path] = None) -> ChainConfig:
     """Load a preset by name.
-    
+
     Args:
         name: Name of the preset to load (without .yaml extension)
         preset_dirs: Optional list of directories to search. If None, uses default dirs.
-        
+
     Returns:
         ChainConfig object
-        
+
     Raises:
         FileNotFoundError: If preset file not found
         ValueError: If preset fails validation
     """
     if preset_dirs is None:
         preset_dirs = get_preset_dirs()
-    
+
     # Try to find the preset file
     for dir_path in preset_dirs:
         if not dir_path.exists():
             continue
-        
+
         # Try with .yaml extension
         yaml_path = dir_path / f"{name}.yaml"
         if yaml_path.exists():
             return parse_chain_config(yaml_path, validate_engines=True)
-        
+
         # Try with .yml extension
         yml_path = dir_path / f"{name}.yml"
         if yml_path.exists():
             return parse_chain_config(yml_path, validate_engines=True)
-    
+
     # Not found
     available = [p.stem for p in discover_presets(preset_dirs)]
     raise FileNotFoundError(
@@ -120,13 +120,13 @@ def load_preset(name: str, preset_dirs: List[Path] = None) -> ChainConfig:
 
 def load_preset_from_path(path: str) -> ChainConfig:
     """Load a preset from a specific file path.
-    
+
     Args:
         path: Path to the preset YAML file
-        
+
     Returns:
         ChainConfig object
-        
+
     Raises:
         FileNotFoundError: If file doesn't exist
         ValueError: If preset fails validation

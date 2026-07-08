@@ -14,14 +14,14 @@ def parse_chain_config(
     validate_engines: bool = True,
 ) -> ChainConfig:
     """Parse a YAML distortion chain configuration file.
-    
+
     Args:
         config_path: Path to the YAML configuration file
         validate_engines: If True, verify all referenced engines are registered
-        
+
     Returns:
         Validated ChainConfig object
-        
+
     Raises:
         FileNotFoundError: If config file doesn't exist
         yaml.YAMLError: If YAML parsing fails
@@ -30,19 +30,19 @@ def parse_chain_config(
     config_path = Path(config_path)
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
-    
-    with open(config_path, "r") as f:
+
+    with open(config_path) as f:
         data = yaml.safe_load(f)
-    
+
     if not isinstance(data, dict):
         raise ValueError("Config file must contain a YAML dictionary")
-    
+
     # Validate with Pydantic
     try:
         chain_config = ChainConfig(**data)
     except Exception as e:
-        raise ValueError(f"Schema validation failed: {e}")
-    
+        raise ValueError(f"Schema validation failed: {e}") from e
+
     # Validate engines if requested
     if validate_engines:
         registry = get_registry()
@@ -52,16 +52,16 @@ def parse_chain_config(
                 raise ValueError(
                     f"Unknown engine '{step.engine}' in step. Available: {available}"
                 )
-    
+
     return chain_config
 
 
 def validate_chain_config(config_path: Union[str, Path]) -> tuple[bool, str]:
     """Validate a distortion chain configuration file without loading it.
-    
+
     Args:
         config_path: Path to the YAML configuration file
-        
+
     Returns:
         Tuple of (is_valid, error_message)
     """

@@ -507,12 +507,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     # distort
     distort_parser = subparsers.add_parser("distort", help="Apply distortion to text")
-    distort_parser.add_argument("--type", choices=["dream", "nightmare"], help="Single engine type (mutually exclusive with --preset)")
-    distort_parser.add_argument("--strength", type=float, default=0.3, help="Distortion strength (0-1)")
+    distort_parser.add_argument(
+        "--type",
+        choices=["dream", "nightmare"],
+        help="Single engine type (mutually exclusive with --preset)",
+    )
+    distort_parser.add_argument(
+        "--strength", type=float, default=0.3, help="Distortion strength (0-1)"
+    )
     distort_parser.add_argument("--text", required=True, help="Input text to distort")
-    distort_parser.add_argument("--seed", type=int, default=None, help="Random seed for reproducibility")
+    distort_parser.add_argument(
+        "--seed", type=int, default=None, help="Random seed for reproducibility"
+    )
     distort_parser.add_argument("--preset", help="Name of preset chain to apply")
-    distort_parser.add_argument("--list-presets", action="store_true", help="List available preset chains")
+    distort_parser.add_argument(
+        "--list-presets", action="store_true", help="List available preset chains"
+    )
     distort_parser.add_argument("--validate", help="Validate a preset YAML file")
 
     # foundation

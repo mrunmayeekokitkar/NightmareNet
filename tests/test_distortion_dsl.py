@@ -1,13 +1,18 @@
 """Tests for distortion DSL (chain execution, parsing, presets)."""
 
-import pytest
-from pathlib import Path
 import tempfile
-import yaml
+from pathlib import Path
 
-from nightmarenet.distortions.dsl import ChainExecutor, parse_chain_config, list_presets, load_preset
-from nightmarenet.distortions.dsl.schema import ChainConfig, ChainStep, Defaults
+import pytest
+
+from nightmarenet.distortions.dsl import (
+    ChainExecutor,
+    list_presets,
+    load_preset,
+    parse_chain_config,
+)
 from nightmarenet.distortions.dsl.parser import validate_chain_config
+from nightmarenet.distortions.dsl.schema import ChainConfig, ChainStep
 
 
 def test_chain_config_schema_validation():
@@ -219,10 +224,10 @@ def test_chain_executor_determinism():
     )
     executor = ChainExecutor()
     text = "The quick brown fox"
-    
+
     result1 = executor.execute(text, config, overall_strength=0.5, seed=42)
     result2 = executor.execute(text, config, overall_strength=0.5, seed=42)
-    
+
     assert result1 == result2
 
 
@@ -236,9 +241,9 @@ def test_chain_executor_with_trace():
     )
     executor = ChainExecutor()
     text = "The quick brown fox"
-    
+
     trace = executor.execute_with_trace(text, config, overall_strength=0.5, seed=42)
-    
+
     assert "original" in trace
     assert "final" in trace
     assert "steps" in trace
@@ -273,13 +278,13 @@ def test_chain_executor_failed_step_continues():
     """Test that failed steps don't abort the chain."""
     # Create a custom registry with a failing engine
     from nightmarenet.distortions.registry import DistortionRegistry
-    
+
     def failing_distort(text: str, strength: float, seed=None) -> str:
         raise RuntimeError("Intentional failure")
-    
+
     registry = DistortionRegistry()
     registry.register("failing", failing_distort)
-    
+
     config = ChainConfig(
         name="test",
         chain=[
@@ -288,10 +293,10 @@ def test_chain_executor_failed_step_continues():
             ChainStep(engine="dream", strength=0.2, condition="always"),
         ]
     )
-    
+
     executor = ChainExecutor(registry=registry)
     text = "The quick brown fox"
-    
+
     # Should not raise, should skip the failing step
     result = executor.execute(text, config, overall_strength=0.5, seed=42)
     assert isinstance(result, str)
