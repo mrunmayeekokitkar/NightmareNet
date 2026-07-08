@@ -4,6 +4,7 @@ Supports loading distortion functions from Python files at runtime,
 enabling the 'custom:' prefix in YAML configs.
 """
 
+import hashlib
 import importlib.util
 import logging
 import sys
@@ -101,8 +102,7 @@ def load_custom_engine(
 
     # Register with a derived name (include file path to avoid collisions)
     # Use a hash of the file path to keep the name manageable
-    import hashlib
-    file_hash = hashlib.md5(file_path.encode()).hexdigest()[:8]
+    file_hash = hashlib.md5(file_path.encode(), usedforsecurity=False).hexdigest()[:8]
     engine_name = f"custom_{file_hash}_{function_name}"
     registry.register(engine_name, fn, metadata={
         'phase': 'custom',
