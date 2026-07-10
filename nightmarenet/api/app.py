@@ -69,6 +69,22 @@ _TRAINING_CONFIG_BODY = Body(...)
 _COMPARE_BODY = Body(...)
 _DEMO_BODY = Body(...)
 
+
+# ------------------------------------------------------------------
+# Startup: load persisted run state
+# ------------------------------------------------------------------
+
+
+def _load_persisted_runs() -> None:
+    """Load persisted pipeline runs from disk on startup."""
+    try:
+        from nightmarenet.pipeline_runner import load_persisted_runs
+        load_persisted_runs()
+        logger.info("Loaded persisted pipeline runs from disk")
+    except Exception:
+        logger.debug("Failed to load persisted runs", exc_info=True)
+
+
 app = FastAPI(
     title="NightmareNet API",
     description="Autonomous AI Self-Improvement Platform — Dream & Nightmare Distortion Service",
@@ -130,21 +146,6 @@ register_data_optimize_routes(app, limiter)
 
 from nightmarenet.distortions.dream import distort as _apply_dream_distortions  # noqa: E402
 from nightmarenet.distortions.nightmare import distort as _apply_nightmare_distortions  # noqa: E402
-
-
-# ------------------------------------------------------------------
-# Startup: load persisted run state
-# ------------------------------------------------------------------
-
-
-def _load_persisted_runs() -> None:
-    """Load persisted pipeline runs from disk on startup."""
-    try:
-        from nightmarenet.pipeline_runner import load_persisted_runs
-        load_persisted_runs()
-        logger.info("Loaded persisted pipeline runs from disk")
-    except Exception:
-        logger.debug("Failed to load persisted runs", exc_info=True)
 
 
 def _char_similarity(a: str, b: str) -> float:

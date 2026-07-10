@@ -12,7 +12,6 @@ import os
 import threading
 import time
 import uuid
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -141,7 +140,6 @@ def register_runner(runner: PipelineRunner) -> str:
     """
     # Periodically evict old runs from disk
     evict_old_runs()
-    
     while len(_runners) >= _MAX_RUNNERS:
         for rid, r in list(_runners.items()):
             if not r.is_running:
@@ -170,15 +168,15 @@ def list_runners() -> list[dict]:
 
 def list_all_runs(include_historical: bool = True) -> list[dict]:
     """Return status of all runs, including historical ones from disk.
-    
+
     Args:
         include_historical: If True, include completed/failed runs from disk.
-    
+
     Returns:
         List of run status dicts.
     """
     runs = [r.status() for r in _runners.values()]
-    
+
     if include_historical:
         runs_dir = _get_runs_dir()
         if runs_dir.exists():
@@ -188,14 +186,14 @@ def list_all_runs(include_historical: bool = True) -> list[dict]:
                 if run_id in _runners:
                     continue
                 try:
-                    with open(run_file, "r", encoding="utf-8") as f:
+                    with open(run_file, encoding="utf-8") as f:
                         data = json.load(f)
                     # Add is_running=False for historical runs
                     data["is_running"] = False
                     runs.append(data)
                 except Exception:
                     logger.debug("Failed to load run state from %s", run_file)
-    
+
     return runs
 
 
@@ -218,7 +216,7 @@ def _persist_run_state(run_id: str, config: dict, status: str, timestamp: float)
     """Persist initial run state to disk."""
     runs_dir = _get_runs_dir()
     run_file = runs_dir / f"{run_id}.json"
-    
+
     state = {
         "run_id": run_id,
         "status": status,
@@ -227,7 +225,7 @@ def _persist_run_state(run_id: str, config: dict, status: str, timestamp: float)
         "last_heartbeat": timestamp,
         "metrics": {},
     }
-    
+
     with open(run_file, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
     logger.debug("Persisted run state for %s to %s", run_id, run_file)
@@ -237,18 +235,18 @@ def _update_run_state(run_id: str, status: str, timestamp: float) -> None:
     """Update run state on disk."""
     runs_dir = _get_runs_dir()
     run_file = runs_dir / f"{run_id}.json"
-    
+
     if not run_file.exists():
         logger.warning("Run state file %s not found for update", run_file)
         return
-    
+
     try:
-        with open(run_file, "r", encoding="utf-8") as f:
+        with open(run_file, encoding="utf-8") as f:
             state = json.load(f)
-        
+
         state["status"] = status
         state["last_heartbeat"] = timestamp
-        
+
         with open(run_file, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2)
     except Exception:
@@ -257,44 +255,44 @@ def _update_run_state(run_id: str, status: str, timestamp: float) -> None:
 
 def load_persisted_runs() -> None:
     """Load persisted runs from disk and recover state.
-    
+
     Marks stale 'running' entries as 'interrupted'.
     Evicts runs older than 30 days.
     """
     runs_dir = _get_runs_dir()
     if not runs_dir.exists():
         return
-    
+
     now = time.time()
     stale_threshold = 300  # 5 minutes in seconds
     age_threshold = 30 * 24 * 3600  # 30 days in seconds
-    
+
     for run_file in runs_dir.glob("*.json"):
         try:
-            with open(run_file, "r", encoding="utf-8") as f:
+            with open(run_file, encoding="utf-8") as f:
                 state = json.load(f)
-            
+
             run_id = state.get("run_id")
             status = state.get("status")
             start_time = state.get("start_time", 0)
             last_heartbeat = state.get("last_heartbeat", 0)
-            
+
             # Evict old runs
             if now - start_time > age_threshold:
                 run_file.unlink()
                 logger.info("Evicted old run %s (age > 30 days)", run_id)
                 continue
-            
+
             # Detect stale running runs
             if status == "running" and (now - last_heartbeat > stale_threshold):
                 state["status"] = "interrupted"
                 with open(run_file, "w", encoding="utf-8") as f:
                     json.dump(state, f, indent=2)
                 logger.info("Marked stale run %s as interrupted", run_id)
-                
+
         except Exception:
             logger.debug("Failed to load run state from %s", run_file)
-    
+
     logger.info("Loaded persisted runs from %s", runs_dir)
 
 
@@ -303,15 +301,15 @@ def evict_old_runs() -> None:
     runs_dir = _get_runs_dir()
     if not runs_dir.exists():
         return
-    
+
     now = time.time()
     age_threshold = 30 * 24 * 3600  # 30 days in seconds
-    
+
     for run_file in runs_dir.glob("*.json"):
         try:
-            with open(run_file, "r", encoding="utf-8") as f:
+            with open(run_file, encoding="utf-8") as f:
                 state = json.load(f)
-            
+
             start_time = state.get("start_time", 0)
             if now - start_time > age_threshold:
                 run_file.unlink()
