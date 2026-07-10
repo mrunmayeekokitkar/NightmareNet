@@ -29,7 +29,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen)](.github/workflows/ci.yml)
-[![Tests](https://img.shields.io/badge/tests-556%2B%20passing-brightgreen)](#testing)
+[![Tests](https://img.shields.io/badge/tests-558%2B%20passing-brightgreen)](#testing)
 [![Python](https://img.shields.io/badge/python-3.9%E2%80%933.12-blue)](#installation)
 
 *Wake. Dream. Nightmare. Compress. Repeat.*
