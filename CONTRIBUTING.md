@@ -8,9 +8,9 @@ Thank you for helping improve NightmareNet. This project uses a **research-first
 
 > **Please complete these steps before opening a Pull Request:**
 
-1. **Star this repository** ╬ô├ç├╢ It helps us gauge community interest and prioritize features.
-2. **Follow [@Adit-Jain-srm](https://github.com/Adit-Jain-srm)** ╬ô├ç├╢ Stay updated on releases, related projects, and research.
-3. **Read this entire guide** ╬ô├ç├╢ PRs that don't follow the coding standards or skip tests will be asked to revise.
+1. **Star this repository** Γò¼├┤Γö£├ºΓö£Γòó It helps us gauge community interest and prioritize features.
+2. **Follow [@Adit-Jain-srm](https://github.com/Adit-Jain-srm)** Γò¼├┤Γö£├ºΓö£Γòó Stay updated on releases, related projects, and research.
+3. **Read this entire guide** Γò¼├┤Γö£├ºΓö£Γòó PRs that don't follow the coding standards or skip tests will be asked to revise.
 4.  **Please read our [Code of Conduct](CODE_OF_CONDUCT.md)** before contributing to help maintain a welcoming and respectful community.
 > Maintainers verify star/follow status before merging. PRs from accounts that haven't completed steps 1-2 will be asked to do so before review begins.
 
@@ -141,19 +141,19 @@ If two people request the same issue simultaneously (within 1 hour):
 
 We value **modularity, clarity, and maintainability** over cleverness. Every contribution should:
 
-- **Single responsibility** ╬ô├ç├╢ One function does one thing. One module owns one concern.
-- **Small, focused files** ╬ô├ç├╢ If a file exceeds 400 lines, consider splitting.
-- **Explicit over implicit** ╬ô├ç├╢ Prefer clear parameter names, type hints, and docstrings over magic.
-- **No god objects** ╬ô├ç├╢ Don't make a class that does everything. Compose small, testable units.
-- **Fail fast, fail loud** ╬ô├ç├╢ Validate inputs early. Raise descriptive errors with context.
+- **Single responsibility** Γò¼├┤Γö£├ºΓö£Γòó One function does one thing. One module owns one concern.
+- **Small, focused files** Γò¼├┤Γö£├ºΓö£Γòó If a file exceeds 400 lines, consider splitting.
+- **Explicit over implicit** Γò¼├┤Γö£├ºΓö£Γòó Prefer clear parameter names, type hints, and docstrings over magic.
+- **No god objects** Γò¼├┤Γö£├ºΓö£Γòó Don't make a class that does everything. Compose small, testable units.
+- **Fail fast, fail loud** Γò¼├┤Γö£├ºΓö£Γòó Validate inputs early. Raise descriptive errors with context.
 
 ### AI-Generated Code Disclosure
 
 If your contribution includes **AI-generated code** (Copilot, ChatGPT, Claude, Cursor, etc.), you must:
 
 1. **Disclose it** in the PR description: "This PR includes AI-assisted code generation."
-2. **Review every line** ╬ô├ç├╢ You are responsible for correctness, not the AI. AI-generated code with obvious bugs or hallucinated APIs will be rejected.
-3. **Understand what it does** ╬ô├ç├╢ Be prepared to explain any code in your PR during review.
+2. **Review every line** Γò¼├┤Γö£├ºΓö£Γòó You are responsible for correctness, not the AI. AI-generated code with obvious bugs or hallucinated APIs will be rejected.
+3. **Understand what it does** Γò¼├┤Γö£├ºΓö£Γòó Be prepared to explain any code in your PR during review.
 
 We welcome AI-assisted contributions. We reject blindly pasted AI output.
 
@@ -164,7 +164,7 @@ Any PR that changes the frontend must include:
 - **Before/after screenshots** (or a short screen recording) in the PR description
 - **Mobile viewport** screenshot (375px width) if the change affects layout
 - **Dark + light mode** screenshots if the change affects colors/theming
-- **Accessibility check** ╬ô├ç├╢ describe how keyboard navigation and screen readers interact with your change
+- **Accessibility check** Γò¼├┤Γö£├ºΓö£Γòó describe how keyboard navigation and screen readers interact with your change
 
 ---
 
@@ -254,19 +254,19 @@ NightmareNet has a strict OSS / hosted boundary. Treat it as a hard constraint w
 
 ### Key entry points
 
-- `nightmarenet.pipeline.Pipeline` ╬ô├ç├╢ orchestrator for the 4-phase cycle
-- `nightmarenet.cli.main` ╬ô├ç├╢ the `nightmarenet` console entry point
-- `nightmarenet.distortions.registry.get_registry` ╬ô├ç├╢ the lazy-singleton plugin registry
-- `nightmarenet.evaluation.evaluator.Evaluator` ╬ô├ç├╢ multi-strength robustness scoring
-- `nightmarenet.api.app` ╬ô├ç├╢ FastAPI app exposing the OSS HTTP surface
+- `nightmarenet.pipeline.Pipeline` Γò¼├┤Γö£├ºΓö£Γòó orchestrator for the 4-phase cycle
+- `nightmarenet.cli.main` Γò¼├┤Γö£├ºΓö£Γòó the `nightmarenet` console entry point
+- `nightmarenet.distortions.registry.get_registry` Γò¼├┤Γö£├ºΓö£Γòó the lazy-singleton plugin registry
+- `nightmarenet.evaluation.evaluator.Evaluator` Γò¼├┤Γö£├ºΓö£Γòó multi-strength robustness scoring
+- `nightmarenet.api.app` Γò¼├┤Γö£├ºΓö£Γòó FastAPI app exposing the OSS HTTP surface
 
 ### Documentation map
 
-- [`docs/architecture/PRD.md`](docs/architecture/PRD.md) ╬ô├ç├╢ product requirements, personas, success metrics, requirements traceability
-- [`docs/architecture/TRD.md`](docs/architecture/TRD.md) ╬ô├ç├╢ technical requirements
-- [Interactive API docs](http://localhost:8000/docs) (auto-generated by FastAPI) ╬ô├ç├╢ OpenAPI spec for the OSS HTTP surface
-- [`docs/research/paper-draft.md`](docs/research/paper-draft.md) ╬ô├ç├╢ academic paper draft (cite this in PRs that touch the algorithm)
-- [`docs/research/benchmark-v1.md`](docs/research/benchmark-v1.md) ╬ô├ç├╢ reproducible benchmark methodology
+- [`docs/architecture/PRD.md`](docs/architecture/PRD.md) Γò¼├┤Γö£├ºΓö£Γòó product requirements, personas, success metrics, requirements traceability
+- [`docs/architecture/TRD.md`](docs/architecture/TRD.md) Γò¼├┤Γö£├ºΓö£Γòó technical requirements
+- [Interactive API docs](http://localhost:8000/docs) (auto-generated by FastAPI) Γò¼├┤Γö£├ºΓö£Γòó OpenAPI spec for the OSS HTTP surface
+- [`docs/research/paper-draft.md`](docs/research/paper-draft.md) Γò¼├┤Γö£├ºΓö£Γòó academic paper draft (cite this in PRs that touch the algorithm)
+- [`docs/research/benchmark-v1.md`](docs/research/benchmark-v1.md) Γò¼├┤Γö£├ºΓö£Γòó reproducible benchmark methodology
 
 ---
 
@@ -308,11 +308,11 @@ def homoglyph(text, strength, seed=None):
 
 Mirror the package layout under `tests/`. At minimum:
 
-1. **Determinism** ╬ô├ç├╢ same `(text, strength, seed)` produces the same output across runs.
+1. **Determinism** Γò¼├┤Γö£├ºΓö£Γòó same `(text, strength, seed)` produces the same output across runs.
 2. **Strength 0** is approximately a no-op.
 3. **Strength 1** produces a measurable change.
 4. **Empty input** returns empty without raising.
-5. **Registry round-trip** ╬ô├ç├╢ `get_registry().apply('your_engine', ...)` returns the same string as calling the function directly.
+5. **Registry round-trip** Γò¼├┤Γö£├ºΓö£Γòó `get_registry().apply('your_engine', ...)` returns the same string as calling the function directly.
 
 ### Documentation
 
@@ -329,7 +329,7 @@ Mirror the package layout under `tests/`. At minimum:
 - **Ruff rules:** `E, F, W, I, N, UP, B`. We ignore `UP007` and `UP045` to keep `Union[X, Y]` available in 3.9-targeted code.
 - **Imports:** isort via ruff. Order: stdlib, third-party, local; alphabetical within each group.
 - **Type hints:**
-  - Use `Union[X, Y]` and `Optional[X]` ╬ô├ç├╢ **not** `X | Y` ╬ô├ç├╢ in any code path that runs on Python 3.9.
+  - Use `Union[X, Y]` and `Optional[X]` Γò¼├┤Γö£├ºΓö£Γòó **not** `X | Y` Γò¼├┤Γö£├ºΓö£Γòó in any code path that runs on Python 3.9.
   - Use `from __future__ import annotations` everywhere **except** modules under `nightmarenet/api/` that use FastAPI `Body(...)`. The future import breaks Pydantic v2 at runtime there. Prefer module-level singletons for `Body(...)` defaults to satisfy `B008`.
 - **Docstrings:** Google style on public APIs only. Internal helpers can be terse.
 - **Errors:** raise with context (`raise X("...") from e`); never bare `raise X`.
@@ -339,7 +339,7 @@ Mirror the package layout under `tests/`. At minimum:
 ### Frontend
 
 - TypeScript only. No `any` in committed code.
-- Tailwind v4 ╬ô├ç├╢ theme lives in the `@theme inline` block, not a `tailwind.config.js`.
+- Tailwind v4 Γò¼├┤Γö£├ºΓö£Γòó theme lives in the `@theme inline` block, not a `tailwind.config.js`.
 - Animations via Framer Motion; respect `prefers-reduced-motion`.
 - Keep client bundles lean; lazy-load heavy charts where possible.
 
@@ -365,12 +365,12 @@ Mirror the package layout under `tests/`. At minimum:
 
 All PRs that change user-facing behavior **must** update relevant documentation:
 
-- **API changes** ╬ô├Ñ├å Update `docs/api/` OpenAPI spec and relevant endpoint docs
-- **New features** ╬ô├Ñ├å Add to `README.md` feature table + relevant section
-- **Config changes** ╬ô├Ñ├å Update `configs/default.yaml` comments + `CLAUDE.md` if applicable
-- **Distortion changes** ╬ô├Ñ├å Update the README distortion table + `docs/research/paper-draft.md`
-- **Frontend changes** ╬ô├Ñ├å Update component inventory in README if adding panels
-- **Breaking changes** ╬ô├Ñ├å Add migration note at the top of PR description
+- **API changes** Γò¼├┤Γö£├æΓö£├Ñ Update `docs/api/` OpenAPI spec and relevant endpoint docs
+- **New features** Γò¼├┤Γö£├æΓö£├Ñ Add to `README.md` feature table + relevant section
+- **Config changes** Γò¼├┤Γö£├æΓö£├Ñ Update `configs/default.yaml` comments + `CLAUDE.md` if applicable
+- **Distortion changes** Γò¼├┤Γö£├æΓö£├Ñ Update the README distortion table + `docs/research/paper-draft.md`
+- **Frontend changes** Γò¼├┤Γö£├æΓö£├Ñ Update component inventory in README if adding panels
+- **Breaking changes** Γò¼├┤Γö£├æΓö£├Ñ Add migration note at the top of PR description
 
 Good documentation is as important as good code. If you're unsure what to update, ask in the PR description and we'll guide you.
 
@@ -383,9 +383,9 @@ Good documentation is as important as good code. If you're unsure what to update
 Before requesting review, confirm every box.
 
 - [ ] I have **starred the repo** and **followed [@Adit-Jain-srm](https://github.com/Adit-Jain-srm)**.
-- [ ] `pytest --cov=nightmarenet tests/ -v --tb=short` ╬ô├ç├╢ green locally.
-- [ ] `ruff check .` ╬ô├ç├╢ zero errors.
-- [ ] `mypy nightmarenet/` ╬ô├ç├╢ no new errors.
+- [ ] `pytest --cov=nightmarenet tests/ -v --tb=short` Γò¼├┤Γö£├ºΓö£Γòó green locally.
+- [ ] `ruff check .` Γò¼├┤Γö£├ºΓö£Γòó zero errors.
+- [ ] `mypy nightmarenet/` Γò¼├┤Γö£├ºΓö£Γòó no new errors.
 - [ ] If frontend changed: `cd frontend && npm run build` succeeds.
 - [ ] No `from __future__ import annotations` added under `nightmarenet/api/`.
 - [ ] No new `nightmarenet/` import of a hosted-only library (`sqlalchemy`, `redis`, `celery`, `psycopg2`, `stripe`).
@@ -439,6 +439,8 @@ These are applied by maintainers at merge time based on quality. **Do not reques
 
 8. **Disclose AI usage.** If you used AI tools (Copilot, ChatGPT, Claude, Cursor), state it in the PR description. We welcome AI-assisted contributions. We reject blindly pasted output.
 
+9. **Compete on quality, not timing.** See an assigned issue where you have a better approach? Comment with your detailed plan - which files, what enhancements, your timeline. We reassign based on the strongest approach, not who commented first. Don't let an existing assignment stop you from proposing a superior implementation.
+
 ### How to Maximize Your Score
 
 - Pick issues matching your skill level (start with L1 if new to the codebase)
@@ -466,12 +468,12 @@ These are applied by maintainers at merge time based on quality. **Do not reques
 
 ## Where to ask for help
 
-- **GitHub Discussions** ╬ô├ç├╢ `https://github.com/Adit-Jain-srm/NightmareNet/discussions`
+- **GitHub Discussions** Γò¼├┤Γö£├ºΓö£Γòó `https://github.com/Adit-Jain-srm/NightmareNet/discussions`
   - `q-and-a` for "how do I..." questions
   - `ideas` for feature proposals (RFC threads welcome)
   - `research` for paper-related discussion, benchmark proposals, citation requests
-- **GitHub Issues** ╬ô├ç├╢ bug reports and concrete tasks
-- **Direct contact** ╬ô├ç├╢ for security disclosures, email the maintainers per [`SECURITY.md`](SECURITY.md). Do **not** open public issues for vulnerabilities.
+- **GitHub Issues** Γò¼├┤Γö£├ºΓö£Γòó bug reports and concrete tasks
+- **Direct contact** Γò¼├┤Γö£├ºΓö£Γòó for security disclosures, email the maintainers per [`SECURITY.md`](SECURITY.md). Do **not** open public issues for vulnerabilities.
 
 We respond fastest to issues that include a minimal reproducible example, the relevant config snippet, and the output of `pip list | findstr nightmarenet` (or `pip freeze | grep nightmarenet` on Unix).
 
