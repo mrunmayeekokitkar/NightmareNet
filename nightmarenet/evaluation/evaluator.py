@@ -62,12 +62,9 @@ def _bootstrap_ci(
 
     # Bootstrap resampling
     n = len(deltas)
-    bootstrap_deltas = []
-    for _ in range(n_bootstrap):
-        indices = np.random.choice(n, size=n, replace=True)
-        bootstrap_deltas.append(np.mean(deltas[indices]))
-
-    bootstrap_deltas = np.array(bootstrap_deltas)
+    bootstrap_deltas = np.array(
+        [np.mean(deltas[np.random.choice(n, size=n, replace=True)]) for _ in range(n_bootstrap)]
+    )
     ci_lower = float(np.percentile(bootstrap_deltas, 100 * alpha / 2))
     ci_upper = float(np.percentile(bootstrap_deltas, 100 * (1 - alpha / 2)))
 
