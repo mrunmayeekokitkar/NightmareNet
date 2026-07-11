@@ -202,7 +202,7 @@ class NightmareDatasetGenerator:
         self.strength_schedule = strength_schedule
         self.strength_min = validate_strength(strength_min, "strength_min")
         self.strength_max = validate_strength(strength_max, "strength_max")
-        
+
         if self.strength_schedule not in ("uniform", "linear", "cosine", "step"):
             raise ValueError(
                 f"Invalid strength_schedule: {self.strength_schedule}. "
@@ -355,10 +355,10 @@ class NightmareDatasetGenerator:
             )
         else:
             strengths = self._compute_strengths(len(dataset))
-            
+
             def _distort_with_strength(example, idx):
                 return self._distort(example, strength=strengths[idx])
-            
+
             nightmare_data = dataset.map(
                 _distort_with_strength,
                 with_indices=True,
