@@ -907,7 +907,7 @@ async def create_pipeline(
                 data = json.load(f)
                 config["notifications"]["webhooks"].extend(data.get("webhooks", []))
         except Exception as e:
-            logger.error(f"Failed to read webhooks in create_pipeline: {e}")
+            logger.error("Failed to read webhooks in create_pipeline: %s", e)
 
 
     pipeline = Pipeline(config=config)
@@ -1017,7 +1017,7 @@ async def get_webhook_settings():
             data = json.load(f)
             return WebhookSettingsResponse(webhooks=data.get("webhooks", []))
     except Exception as e:
-        logger.error(f"Failed to read webhooks: {e}")
+        logger.error("Failed to read webhooks: %s", e)
         return WebhookSettingsResponse(webhooks=[])
 
 
@@ -1038,7 +1038,7 @@ async def save_webhook_settings(
             json.dump({"webhooks": [w.dict() for w in body.webhooks]}, f, indent=2)
         return WebhookSettingsResponse(webhooks=body.webhooks)
     except Exception as e:
-        logger.error(f"Failed to save webhooks: {e}")
+        logger.error("Failed to save webhooks: %s", e)
         raise HTTPException(
             status_code=500, detail="Failed to save webhook settings."
         ) from None
