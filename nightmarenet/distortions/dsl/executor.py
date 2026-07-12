@@ -87,9 +87,12 @@ class ChainExecutor:
                 raise ValueError("Condition must have exactly one comparison")
 
             comparator = node.comparators[0]
-            if not isinstance(comparator, (ast.Constant, ast.Num)):
-                # ast.Num is for Python < 3.8, ast.Constant >= 3.8
-                raise ValueError("Condition must compare with a numeric literal")
+            if hasattr(ast, "Num") and isinstance(comparator, ast.Num):
+                expected_value = comparator.n
+            elif isinstance(comparator, ast.Constant):
+                expected_value = comparator.value
+            else:
+                raise TypeError("Condition must compare with a numeric literal")
 
             # Validate the operator
             allowed_ops = {

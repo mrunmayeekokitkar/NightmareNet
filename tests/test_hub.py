@@ -23,6 +23,7 @@ def test_generate_model_card_formatting():
     assert "distilbert-base-uncased" in card_content
 
 @patch("huggingface_hub.HfApi")
+@patch.dict("os.environ", {"HF_TOKEN": "mock_token_for_testing"})
 def test_push_model_execution(mock_hf_api, tmp_path):
     """Verify push_model writes README.md and calls HfApi upload methods correctly."""
     mock_api_instance = MagicMock()

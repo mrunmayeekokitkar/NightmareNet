@@ -71,11 +71,12 @@ class ChainStep(BaseModel):
                 raise ValueError("Condition must have exactly one comparison")
 
             comparator = node.comparators[0]
-            if not isinstance(comparator, (ast.Constant, ast.Num)):
-                # ast.Num is for Python < 3.8, ast.Constant >= 3.8
-                if isinstance(comparator, ast.Constant) and comparator.value is None:
-                    raise ValueError("None literal is not allowed")
+            valid_types = (ast.Constant, ast.Num) if hasattr(ast, "Num") else (ast.Constant,)
+            if not isinstance(comparator, valid_types):
                 raise ValueError("Condition must compare with a numeric literal")
+            # ast.Num is for Python < 3.8, ast.Constant >= 3.8
+            if isinstance(comparator, ast.Constant) and comparator.value is None:
+                raise ValueError("None literal is not allowed")
 
             # Validate the operator
             allowed_ops = {
