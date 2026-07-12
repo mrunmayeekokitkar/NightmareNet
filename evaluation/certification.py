@@ -83,6 +83,23 @@ class CertificationResult:
     correct: Optional[bool] = None
 
 
+def _empty_certification_result() -> dict:
+    """Aggregate result returned when there are zero samples to certify.
+
+    Shared by both emptiness checks in certify_dataset (before and after subset
+    selection) so the "no samples" shape is defined in exactly one place.
+    """
+    return {
+        "metric": "certification",
+        "n_samples": 0,
+        "certified_radius_mean": 0.0,
+        "certified_radius_median": 0.0,
+        "certification_abstain_rate": 0.0,
+        "certified_accuracy": None,
+        "results": [],
+    }
+
+
 def clopper_pearson_lower_bound(k: int, n: int, alpha: float) -> float:
     """One-sided Clopper-Pearson lower confidence bound on a binomial proportion.
 
@@ -404,7 +421,9 @@ def certify_dataset(
         sigma, n, alpha, batch_size, max_length, device: See certify_sample.
         subset_size: If given, certify only a random (seeded) subset of this size rather
             than the full dataset -- certification is far more expensive per-sample than
-            the empirical metrics, so a full-dataset run is rarely appropriate.
+            the empirical metrics, so a full-dataset run is rarely appropriate. A
+            subset_size of 0 (or one that happens to select zero rows) is treated the
+            same as an empty dataset.
         certification_budget_total: Optional hard cap on total forward passes summed
             across every sample in this call. Divided evenly across samples (graceful
             degradation: every sample gets a smaller n rather than some samples being
@@ -418,53 +437,36 @@ def certify_dataset(
         and the full list of per-sample CertificationResult objects under "results".
     """
     if len(dataset) == 0:
-    return {
-        "metric": "certification",
-        "n_samples": 0,
-        "certified_radius_mean": 0.0,
-        "certified_radius_median": 0.0,
-        "certification_abstain_rate": 0.0,
-        "certified_accuracy": None,
-        "results": [],
-    }
+        return _empty_certification_result()
+
     if subset_size is not None:
         dataset = dataset.shuffle(seed=42).select(range(min(subset_size, len(dataset))))
-        # subset_size may be 0 (or larger than 0 but the dataset still ends up
-        # empty), so re-check emptiness after selection rather than assuming the
-        # original dataset length still applies.
+        # subset_size may be 0 (or otherwise leave nothing selected), so re-check
+        # emptiness here rather than assuming the original dataset length still
+        # applies -- otherwise the divisions below (certification_budget_total //
+        # len(dataset), and abstain_count / len(results) further down) would raise
+        # ZeroDivisionError instead of returning a clean empty result.
         if len(dataset) == 0:
-          return {
-            "metric": "certification",
-            "n_samples": 0,
-            "certified_radius_mean": 0.0,
-            "certified_radius_median": 0.0,
-            "certification_abstain_rate": 0.0,
-            "certified_accuracy": None,
-            "results": [],
-          }
+            return _empty_certification_result()
+
     if certification_budget_total is not None:
-       # Distribute the total fairly and exactly: base passes per sample, with the
-       # remainder spread one-per-sample rather than forcing a minimum of 1 per sample
-       # regardless of budget (that would silently let a small budget total across many
-       # samples add up to far more than certification_budget_total).
-       base = certification_budget_total // len(dataset)
-       remainder = certification_budget_total % len(dataset)
-       per_sample_budgets = [base + 1 if i < remainder else base for i in range(len(dataset))]
-       logger.info(
-          "certification_budget_total=%d over %d samples -> %d-%d forward passes/sample",
-           certification_budget_total, len(dataset), base, base + (1 if remainder else 0),
+        # Distribute the total fairly and exactly: base passes per sample, with the
+        # remainder spread one-per-sample rather than forcing a minimum of 1 per sample
+        # regardless of budget (that would silently let a small budget total across many
+        # samples add up to far more than certification_budget_total).
+        base = certification_budget_total // len(dataset)
+        remainder = certification_budget_total % len(dataset)
+        per_sample_budgets = [base + 1 if i < remainder else base for i in range(len(dataset))]
+        logger.info(
+            "certification_budget_total=%d over %d samples -> %d-%d forward passes/sample",
+            certification_budget_total, len(dataset), base, base + (1 if remainder else 0),
         )
     else:
-       per_sample_budgets = [None] * len(dataset)
+        per_sample_budgets = [None] * len(dataset)
 
     results: list[CertificationResult] = []
-    for example, sample_budget in zip(
-      tqdm(
-        dataset,
-        desc="Certifying samples (randomized smoothing)",
-      ),
-      per_sample_budgets,
-    ):
+    progress = tqdm(dataset, desc="Certifying samples (randomized smoothing)")
+    for example, sample_budget in zip(progress, per_sample_budgets):
         label = example.get(label_column) if label_column else None
         result = certify_sample(
             model,
