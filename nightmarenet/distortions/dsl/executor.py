@@ -87,13 +87,17 @@ class ChainExecutor:
                 raise ValueError("Condition must have exactly one comparison")
 
             comparator = node.comparators[0]
-            if hasattr(ast, "Num") and isinstance(comparator, ast.Num):
-                expected_value = comparator.n
-            elif isinstance(comparator, ast.Constant):
-                expected_value = comparator.value
-            else:
-                raise TypeError("Condition must compare with a numeric literal")
-
+            valid_types = (ast.Constant, ast.Num) if hasattr(ast, "Num") else (ast.Constant,)
+            # 1. Ensure it is a valid literal type
+            if not isinstance(comparator, valid_types):
+                raise ValueError("Condition must compare with a numeric literal")
+            # 2. Block 'None' literals explicitly if it's an ast.Constant
+            if isinstance(comparator, ast.Constant) and comparator.value is None:
+                raise ValueError("None literal is not allowed")
+            # 3. Block non-numeric constants (like strings or booleans)
+            if isinstance(comparator, ast.Constant):
+                if not isinstance(comparator.value, (int, float)):
+                    raise ValueError("Condition must compare with a numeric literal")
             # Validate the operator
             allowed_ops = {
                 ast.Gt: ">",
