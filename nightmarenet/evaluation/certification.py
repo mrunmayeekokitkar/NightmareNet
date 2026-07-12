@@ -21,16 +21,13 @@ therefore a radius in embedding space, not token/edit-distance space. This is a
 meaningfully different guarantee than the vision-domain radius and must be surfaced as
 such wherever certified radii are reported downstream (see format_results.py, sub-PR 3).
 
-Statistical note -- single-stage vs. two-stage CERTIFY:
-Cohen et al.'s original CERTIFY procedure uses two *independent* sample batches: a small
-n0 to select a candidate class, and a separate, larger n to estimate its probability, so
-that picking the candidate class doesn't bias the confidence bound computed for it. Per
-this module's specified scope (single `n`, `certify_sample(model, tokenizer, text, label,
-sigma, n, alpha)`), the same n samples are used for both class selection and the
-Clopper-Pearson bound. This is a known simplification relative to the two-stage
-procedure (it technically underestimates the true selection-adjusted confidence level by
-a small margin) but is a common, explicitly-scoped choice for this implementation and
-matches the acceptance criteria and reference value given in issue #160.
+Statistical note -- two-stage CERTIFY:
+Following Cohen et al.'s original procedure, certify_sample uses two *independent*
+sample batches: a small n0 to select a candidate class, and a separate n to estimate its
+probability. Reusing the same samples for both selection and the confidence bound would
+bias the bound upward (the class is chosen *because* it had the most votes in that batch),
+understating the true uncertainty -- keeping the batches independent is what makes the
+reported (1 - alpha) confidence level valid.
 
 Scope: only randomized smoothing is implemented here. Interval bound propagation (IBP)
 is explicitly out of scope -- see parent issue #153. This module has no dependency on
@@ -185,7 +182,10 @@ def _run_noisy_forward_passes(
     counts = np.zeros(num_classes, dtype=np.int64)
     if n <= 0:
         return counts
+    if batch_size <= 0:
+        raise ValueError(f"batch_size must be positive, got {batch_size}")
 
+    was_training = model.training
     model.eval()
     embedding_layer = model.get_input_embeddings()
     hook_handle = embedding_layer.register_forward_hook(_make_noise_hook(sigma))
@@ -209,6 +209,9 @@ def _run_noisy_forward_passes(
         # Hook cleanup is not optional: leaving it attached would inject noise into every
         # subsequent normal (non-certification) inference call on this model.
         hook_handle.remove()
+        # Certification must not silently leave a model the caller was training stuck in
+        # eval mode afterward.
+        model.train(was_training)
 
     return counts
 
@@ -222,6 +225,7 @@ def certify_sample(
     n: int = 1000,
     alpha: float = 0.001,
     *,
+    n0: int = 100,
     num_classes: Optional[int] = None,
     batch_size: int = 100,
     max_length: int = 128,
@@ -230,11 +234,22 @@ def certify_sample(
 ) -> CertificationResult:
     """Certify a single text input via randomized smoothing.
 
-    Tokenizes `text`, draws n noisy embedding-space copies (Gaussian noise, std=sigma,
-    injected via a forward hook on the embedding layer), and takes the plurality-vote
-    class as the smoothed prediction. Computes a (1 - alpha) one-sided Clopper-Pearson
-    lower bound p_A on the true probability that a noisy copy predicts that class. If
-    p_A > 0.5, returns a certified L2 (embedding-space) radius of `sigma * Phi^-1(p_A)`;
+    Tokenizes `text` and runs the two-stage CERTIFY procedure from Cohen et al. (2019):
+
+      1. Selection: draw n0 noisy embedding-space copies, take the plurality-vote class
+         as the candidate prediction c_A. This stage is *not* used in the statistical
+         bound below -- only to pick which class to test.
+      2. Estimation: draw n further noisy copies, *independent* of the selection stage,
+         and count how many predict c_A. Compute a (1 - alpha) one-sided Clopper-Pearson
+         lower bound p_A on the true probability that a noisy copy predicts c_A.
+
+    Using the same samples for both selection and the confidence bound (a single-stage
+    shortcut) biases k upward, since the class was chosen *because* it had the most votes
+    in that same batch -- the reported confidence would then overstate the true coverage.
+    Keeping the two stages independent (fresh noise for each) is what makes the bound
+    statistically valid at the declared (1 - alpha) level.
+
+    If p_A > 0.5, returns a certified L2 (embedding-space) radius of `sigma * Phi^-1(p_A)`;
     otherwise abstains (radius 0.0, abstained=True).
 
     Args:
@@ -245,21 +260,26 @@ def certify_sample(
         text: The input text to certify.
         label: Optional ground-truth label, for certified-accuracy reporting.
         sigma: Standard deviation of the Gaussian smoothing noise, in embedding space.
-        n: Requested number of noisy forward-pass samples.
+        n: Requested number of estimation-stage noisy forward-pass samples.
         alpha: Significance level for the Clopper-Pearson bound (e.g. 0.001 = 99.9%
             one-sided confidence).
+        n0: Number of selection-stage samples, independent of `n`. Cheap relative to `n`
+            since it only needs to pick a candidate class, not bound its probability.
         num_classes: Number of output classes. Inferred from model.config.num_labels if
             omitted.
         batch_size: Max noisy copies processed in a single forward pass.
         max_length: Max token length for tokenization.
-        certification_budget: Optional hard cap on n for this sample; if lower than the
-            requested n, n is clamped down and a warning logged (graceful degradation
-            rather than a silent skip).
+        certification_budget: Optional hard cap on n0 + n for this sample. n0 is
+            preserved as long as possible (it's cheap and needed just to pick a candidate
+            class); n is reduced first. If the budget doesn't even cover n0, n0 itself is
+            reduced and the sample is abstained on without running the estimation stage
+            (graceful degradation rather than a silent skip).
         device: Device to run inference on.
 
     Returns:
         CertificationResult with the smoothed prediction, certified radius, the
-        Clopper-Pearson bound used, samples consumed, and (if `label` given) correctness.
+        Clopper-Pearson bound used, total samples consumed (n0 + n), and (if `label`
+        given) correctness.
     """
     if num_classes is None:
         num_classes = getattr(getattr(model, "config", None), "num_labels", None)
@@ -269,12 +289,17 @@ def certify_sample(
                 "pass it explicitly."
             )
 
-    n_actual = n
+    n0_actual, n_actual = n0, n
     if certification_budget is not None:
-        n_actual = max(0, min(n, certification_budget))
-        if n_actual < n:
+        if n0 >= certification_budget:
+            n0_actual, n_actual = max(0, certification_budget), 0
+        else:
+            n0_actual, n_actual = n0, min(n, certification_budget - n0)
+        if n0_actual < n0 or n_actual < n:
             logger.warning(
-                "Certification budget clamped n from %d to %d for this sample.", n, n_actual
+                "Certification budget clamped sample: requested n0=%d n=%d, "
+                "using n0=%d n=%d (budget=%d)",
+                n0, n, n0_actual, n_actual, certification_budget,
             )
 
     encoded = tokenizer(text, truncation=True, max_length=max_length, return_tensors="pt")
@@ -283,7 +308,12 @@ def certify_sample(
     if attention_mask is not None:
         attention_mask = attention_mask.to(device)
 
-    if n_actual <= 0:
+    # Stage 1: selection.
+    selection_counts = _run_noisy_forward_passes(
+        model, input_ids, attention_mask, sigma, n0_actual, num_classes, batch_size, device
+    )
+    if selection_counts.sum() == 0:
+        # Budget exhausted before selection could even run -- nothing to certify.
         return CertificationResult(
             prediction=-1,
             certified_radius=0.0,
@@ -293,13 +323,25 @@ def certify_sample(
             label=label,
             correct=None,
         )
+    prediction = int(selection_counts.argmax())
 
-    counts = _run_noisy_forward_passes(
+    if n_actual <= 0:
+        # Have a candidate class but no (independent) statistical grounds to certify it.
+        return CertificationResult(
+            prediction=prediction,
+            certified_radius=0.0,
+            p_a_lower=0.0,
+            n_samples_used=n0_actual,
+            abstained=True,
+            label=label,
+            correct=(prediction == label) if label is not None else None,
+        )
+
+    # Stage 2: estimation, statistically independent fresh samples.
+    estimation_counts = _run_noisy_forward_passes(
         model, input_ids, attention_mask, sigma, n_actual, num_classes, batch_size, device
     )
-
-    prediction = int(counts.argmax())
-    k = int(counts[prediction])
+    k = int(estimation_counts[prediction])
     p_a_lower = clopper_pearson_lower_bound(k, n_actual, alpha)
 
     if p_a_lower <= 0.5:
@@ -311,7 +353,7 @@ def certify_sample(
             prediction=prediction,
             certified_radius=0.0,
             p_a_lower=p_a_lower,
-            n_samples_used=n_actual,
+            n_samples_used=n0_actual + n_actual,
             abstained=True,
             label=label,
             correct=(prediction == label) if label is not None else None,
@@ -322,7 +364,7 @@ def certify_sample(
         prediction=prediction,
         certified_radius=radius,
         p_a_lower=p_a_lower,
-        n_samples_used=n_actual,
+        n_samples_used=n0_actual + n_actual,
         abstained=False,
         label=label,
         correct=(prediction == label) if label is not None else None,
@@ -391,14 +433,22 @@ def certify_dataset(
 
     per_sample_budget = None
     if certification_budget_total is not None:
-        per_sample_budget = max(1, certification_budget_total // len(dataset))
+        # Distribute the total fairly and exactly: base passes per sample, with the
+        # remainder spread one-per-sample rather than forcing a minimum of 1 per sample
+        # regardless of budget (that would silently let a small budget total across many
+        # samples add up to far more than certification_budget_total).
+        base = certification_budget_total // len(dataset)
+        remainder = certification_budget_total % len(dataset)
+        per_sample_budgets = [base + 1 if i < remainder else base for i in range(len(dataset))]
         logger.info(
-            "certification_budget_total=%d over %d samples -> %d forward passes/sample",
-            certification_budget_total, len(dataset), per_sample_budget,
+            "certification_budget_total=%d over %d samples -> %d-%d forward passes/sample",
+            certification_budget_total, len(dataset), base, base + (1 if remainder else 0),
         )
+    else:
+        per_sample_budgets = [None] * len(dataset)
 
     results: list[CertificationResult] = []
-    for example in tqdm(dataset, desc="Certifying samples (randomized smoothing)"):
+    for example, sample_budget in zip(tqdm(dataset, desc="Certifying samples (randomized smoothing)"), per_sample_budgets):
         label = example.get(label_column) if label_column else None
         result = certify_sample(
             model,
@@ -410,14 +460,22 @@ def certify_dataset(
             alpha=alpha,
             batch_size=batch_size,
             max_length=max_length,
-            certification_budget=per_sample_budget,
+            certification_budget=sample_budget,
             device=device,
         )
         results.append(result)
 
-    radii = [r.certified_radius for r in results if not r.abstained]
+    # Abstained samples already carry certified_radius=0.0 by construction (see
+    # CertificationResult), so they're included directly here rather than filtered out --
+    # excluding them would inflate the mean/median radius by only counting the samples
+    # that happened to succeed. Same for accuracy: a sample the classifier couldn't
+    # certify is not a certified-correct prediction, so abstained samples with a label
+    # count as incorrect (0) rather than being dropped from the denominator entirely.
+    radii = [r.certified_radius for r in results]
     abstain_count = sum(1 for r in results if r.abstained)
-    correctness = [r.correct for r in results if r.correct is not None and not r.abstained]
+    correctness = [
+        (r.correct if not r.abstained else False) for r in results if r.label is not None
+    ]
 
     return {
         "metric": "certification",
