@@ -556,4 +556,5 @@ class CompressionPhase:
             "method": method,
             "pruning_ratio": pruning_ratio,
             **stats,
+            **distillation_stats,
         }

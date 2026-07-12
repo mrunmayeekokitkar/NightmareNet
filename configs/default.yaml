@@ -70,7 +70,7 @@ compression:
   pruning_method: magnitude
   finetune_after_prune: true
   finetune_epochs: 1
-  distillation: true
+  distillation: false
   distillation_temperature: 4.0
   distillation_alpha: 0.7
   distillation_epochs: 1
