@@ -339,6 +339,15 @@ nightmarenet distort --type nightmare --strength 0.7 --seed 42 \
 
 The CLI is a thin wrapper around `nightmarenet.pipeline.Pipeline`, `nightmarenet.distortions.registry.get_registry()`, and `nightmarenet.evaluation.evaluator.Evaluator`. Anything you can do via CLI you can do programmatically.
 
+### HuggingFace Hub Integration
+
+NightmareNet supports pushing your hardened, robust models directly to the HuggingFace Hub, or pulling pre-hardened checkpoints down for inference.
+
+#### Push a Hardened Model
+Uploads a local model directory alongside an auto-generated model card:
+```bash
+nightmarenet push --model ./output/best --hub your-username/nightmarenet-model-robust --metadata ./output/metadata.yaml
+
 ---
 
 ## Use Cases
