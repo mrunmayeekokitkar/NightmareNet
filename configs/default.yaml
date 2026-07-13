@@ -28,6 +28,7 @@ training:
   nightmare_lr_multiplier: 2.0  # Higher LR for nightmare phase
   weight_decay: 0.01
   warmup_steps: 100
+  lr_schedule: none            # "none" | "linear_warmup_cosine"
   gradient_accumulation_steps: 4
   max_grad_norm: 1.0
   use_amp: false               # Mixed-precision training (requires CUDA)

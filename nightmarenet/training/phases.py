@@ -371,25 +371,29 @@ class NightmarePhase:
         self.max_grad_norm = config.get("max_grad_norm", 1.0)
         self.gradient_accumulation_steps = config.get("gradient_accumulation_steps", 1)
 
-    def _save_lr(self) -> list[float]:
+    def _save_lr(self) -> dict:
         """Save current learning rates and scheduler base_lrs."""
-        return [pg["lr"] for pg in self.optimizer.param_groups]
+        state = {
+            "optimizer_lrs": [pg["lr"] for pg in self.optimizer.param_groups]
+        }
+        if self.lr_scheduler is not None and hasattr(self.lr_scheduler, "base_lrs"):
+            state["scheduler_base_lrs"] = list(self.lr_scheduler.base_lrs)
+        return state
 
-    def _restore_lr(self, saved_lrs: list[float]) -> None:
-        """Restore learning rates from saved values."""
-        if len(saved_lrs) != len(self.optimizer.param_groups):
+    def _restore_lr(self, saved_state: dict) -> None:
+        """Restore learning rates and scheduler base_lrs from saved state."""
+        opt_lrs = saved_state["optimizer_lrs"]
+        if len(opt_lrs) != len(self.optimizer.param_groups):
             logger.warning(
                 "LR restore mismatch: %d saved vs %d param groups",
-                len(saved_lrs),
+                len(opt_lrs),
                 len(self.optimizer.param_groups),
             )
-        for pg, lr in zip(self.optimizer.param_groups, saved_lrs):
+        for pg, lr in zip(self.optimizer.param_groups, opt_lrs):
             pg["lr"] = lr
-        # Restore scheduler base_lrs if scheduler exists
-        if self.lr_scheduler is not None and hasattr(self.lr_scheduler, "base_lrs"):
-            for i, lr in enumerate(saved_lrs):
-                if i < len(self.lr_scheduler.base_lrs):
-                    self.lr_scheduler.base_lrs[i] = lr
+
+        if self.lr_scheduler is not None and "scheduler_base_lrs" in saved_state:
+            self.lr_scheduler.base_lrs = list(saved_state["scheduler_base_lrs"])
 
     def _adjust_lr(self, multiplier: float) -> None:
         """Temporarily adjust learning rate (composes with scheduler)."""
@@ -422,7 +426,7 @@ class NightmarePhase:
         self.model.train()
 
         # Save and increase learning rate for nightmare phase
-        saved_lrs = self._save_lr()
+        saved_lr_state = self._save_lr()
         self._adjust_lr(self.lr_multiplier)
 
         total_loss = 0.0
@@ -501,7 +505,7 @@ class NightmarePhase:
                 total_loss += avg_epoch_loss
         finally:
             # Restore original learning rate from saved values
-            self._restore_lr(saved_lrs)
+            self._restore_lr(saved_lr_state)
 
         return {
             "phase": "nightmare",
@@ -529,12 +533,14 @@ class CompressionPhase:
         device: Union[str, torch.device] = "cpu",
         scaler: Optional[torch.amp.GradScaler] = None,
         callback_manager: Optional[CallbackManager] = None,
+        lr_scheduler=None,
     ) -> None:
         self.model = model
         self.config = config
         self.device = device
         self.scaler = scaler
         self.callback_manager = callback_manager
+        self.lr_scheduler = lr_scheduler
 
     def run(
         self,
@@ -608,6 +614,8 @@ class CompressionPhase:
                     else:
                         loss.backward()
                         optimizer.step()
+                    if self.lr_scheduler is not None:
+                        self.lr_scheduler.step()
                     optimizer.zero_grad()
 
                 if self.callback_manager is not None:

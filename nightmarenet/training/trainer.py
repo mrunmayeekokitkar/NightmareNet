@@ -25,6 +25,7 @@ from transformers import (
     AutoModelForMaskedLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    get_cosine_schedule_with_warmup,
 )
 
 from nightmarenet.distributed.checkpoint import AtomicCheckpointer
@@ -238,6 +239,7 @@ class Trainer:
 
         # Create scheduler
         self.scheduler = create_scheduler_from_config(config)
+        self.lr_scheduler = None
 
         # Reference model for KL regularization (created after wake phase)
         self.reference_model = None
@@ -344,6 +346,9 @@ class Trainer:
 
         state = {
             "optimizer_state_dict": self.optimizer.state_dict(),
+            "lr_scheduler_state_dict": (
+                self.lr_scheduler.state_dict() if self.lr_scheduler is not None else None
+            ),
             "scaler_state_dict": self.scaler.state_dict() if self.scaler is not None else None,
             "cycle": cycle,
             "phase": phase,
@@ -419,15 +424,56 @@ class Trainer:
         # Native distributed logic is applied per-phase via apply_phase_strategy
 
         warmup_steps = self.training_config.get("warmup_steps", 0)
+        lr_schedule = self.training_config.get("lr_schedule", "none")
 
-        lr_scheduler = None
+        def get_dataloader_steps(dataloader, default_steps=1000):
+            try:
+                return len(dataloader)
+            except (TypeError, AttributeError):
+                return default_steps
 
-        if warmup_steps > 0:
+        self.lr_scheduler = None
 
+        if lr_schedule == "linear_warmup_cosine":
+            grad_accum = self.training_config.get("gradient_accumulation_steps", 1)
+            steps_per_epoch_train = get_dataloader_steps(train_dataloader)
+            steps_per_epoch_dream = get_dataloader_steps(dream_dataloader)
+            steps_per_epoch_nightmare = get_dataloader_steps(nightmare_dataloader)
+
+            wake_epochs = self.training_config.get("wake_epochs", 3)
+            dream_epochs = self.training_config.get("dream_epochs", 2)
+            nightmare_epochs = self.training_config.get("nightmare_epochs", 1)
+            num_cycles = self.training_config.get("num_cycles", 3)
+
+            finetune_after_prune = self.compression_config.get("finetune_after_prune", True)
+            finetune_epochs = (
+                self.compression_config.get("finetune_epochs", 1)
+                if finetune_after_prune
+                else 0
+            )
+
+            def get_opt_steps(steps, accum):
+                return max(1, steps // accum)
+
+            wake_steps = get_opt_steps(steps_per_epoch_train, grad_accum) * wake_epochs
+            dream_steps = get_opt_steps(steps_per_epoch_dream, grad_accum) * dream_epochs
+            nightmare_steps = (
+                get_opt_steps(steps_per_epoch_nightmare, grad_accum) * nightmare_epochs
+            )
+            compress_steps = get_opt_steps(steps_per_epoch_train, grad_accum) * finetune_epochs
+
+            total_steps = num_cycles * (wake_steps + dream_steps + nightmare_steps + compress_steps)
+
+            self.lr_scheduler = get_cosine_schedule_with_warmup(
+                self.optimizer,
+                num_warmup_steps=warmup_steps,
+                num_training_steps=total_steps,
+            )
+        elif warmup_steps > 0:
             def warmup_lambda(current_step):
                 return min(1.0, current_step / warmup_steps)
 
-            lr_scheduler = LambdaLR(
+            self.lr_scheduler = LambdaLR(
                 self.optimizer,
                 lr_lambda=warmup_lambda,
             )
@@ -487,6 +533,17 @@ class Trainer:
                                 self.optimizer.load_state_dict(saved_opt)
                             except Exception as opt_err:
                                 logger.warning("Failed to load optimizer state dict: %s", opt_err)
+
+                    has_sched_state = state.get("lr_scheduler_state_dict") is not None
+                    if self.lr_scheduler is not None and has_sched_state:
+                        try:
+                            self.lr_scheduler.load_state_dict(state["lr_scheduler_state_dict"])
+                            logger.info("Resumed learning rate scheduler state.")
+                        except Exception as lr_err:
+                            logger.warning(
+                                "Failed to load learning rate scheduler state dict: %s",
+                                lr_err,
+                            )
 
                     if self.scaler is not None and state.get("scaler_state_dict") is not None:
                         try:
@@ -613,7 +670,7 @@ class Trainer:
                         device=self.device,
                         scaler=self.scaler,
                         callback_manager=self.callback_manager,
-                        lr_scheduler=lr_scheduler,
+                        lr_scheduler=self.lr_scheduler,
                     )
                     result = wake_runner.run(train_dataloader, num_epochs=num_epochs)
 
@@ -633,7 +690,7 @@ class Trainer:
                         kl_weight=0.1,
                         scaler=self.scaler,
                         callback_manager=self.callback_manager,
-                        lr_scheduler=lr_scheduler,
+                        lr_scheduler=self.lr_scheduler,
                     )
                     result = dream_runner.run(dream_dataloader, num_epochs=num_epochs)
 
@@ -647,7 +704,7 @@ class Trainer:
                         lr_multiplier=lr_multiplier,
                         scaler=self.scaler,
                         callback_manager=self.callback_manager,
-                        lr_scheduler=lr_scheduler,
+                        lr_scheduler=self.lr_scheduler,
                     )
                     result = nightmare_runner.run(nightmare_dataloader, num_epochs=num_epochs)
 
@@ -658,6 +715,7 @@ class Trainer:
                         device=self.device,
                         scaler=self.scaler,
                         callback_manager=self.callback_manager,
+                        lr_scheduler=self.lr_scheduler,
                     )
                     result = compress_runner.run(
                         dataloader=train_dataloader,
