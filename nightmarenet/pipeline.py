@@ -545,6 +545,11 @@ class Pipeline:
                     self._nightmare_base if self._nightmare_base is not None else self._dataset
                 )
 
+                self._dream_generator = dream_gen
+                self._nightmare_generator = nightmare_gen
+                self._dream_base_dataset = dream_base
+                self._nightmare_base_dataset = nightmare_base
+
                 dream_data = dream_gen.generate(dream_base)
                 nightmare_data = nightmare_gen.generate(nightmare_base)
 
@@ -657,6 +662,10 @@ class Pipeline:
                     nightmare_dataloader=self._nightmare_dl,
                     val_dataloader=self._val_dl,
                     on_progress=_on_train_progress,
+                    dream_generator=getattr(self, "_dream_generator", None),
+                    nightmare_generator=getattr(self, "_nightmare_generator", None),
+                    dream_base_dataset=getattr(self, "_dream_base_dataset", None),
+                    nightmare_base_dataset=getattr(self, "_nightmare_base_dataset", None),
                 )
 
                 # Update metrics from history

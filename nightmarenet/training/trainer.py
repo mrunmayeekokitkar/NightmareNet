@@ -395,6 +395,10 @@ class Trainer:
         nightmare_dataloader: DataLoader,
         val_dataloader: Optional[DataLoader] = None,
         on_progress: Optional[Callable[[dict], None]] = None,
+        dream_generator: Optional[Any] = None,
+        nightmare_generator: Optional[Any] = None,
+        dream_base_dataset: Optional[Any] = None,
+        nightmare_base_dataset: Optional[Any] = None,
     ) -> list[dict]:
         """Run the full sleep-cycle training pipeline.
 
@@ -403,6 +407,11 @@ class Trainer:
             dream_dataloader: DataLoader for dream phase (mildly distorted).
             nightmare_dataloader: DataLoader for nightmare phase (extreme perturbations).
             val_dataloader: Optional DataLoader for validation.
+            on_progress: Optional progress callback.
+            dream_generator: Optional generator for dream dataset.
+            nightmare_generator: Optional generator for nightmare dataset.
+            dream_base_dataset: Optional base dataset for dream.
+            nightmare_base_dataset: Optional base dataset for nightmare.
 
         Returns:
             List of phase result dicts (training history).
@@ -533,11 +542,69 @@ class Trainer:
                     state_path,
                 )
 
+        last_cycle_for_strength = -1
         try:
             for cycle, phase, num_epochs in self.scheduler:
                 if cycle < getattr(self, "_start_cycle", 0):
                     logger.info(f"Skipping cycle {cycle} (resuming from {self._start_cycle})")
                     continue
+
+                if cycle != last_cycle_for_strength:
+                    last_cycle_for_strength = cycle
+                    if self.config.get("distortion", {}).get("schedule_across_cycles", False):
+                        num_cycles = self.training_config.get("num_cycles", 3)
+                        distortion_config = self.config.get("distortion", {})
+                        strength_min = distortion_config.get("strength_min", 0.2)
+                        strength_max = distortion_config.get("strength_max", 0.9)
+
+                        if num_cycles > 1:
+                            diff = strength_max - strength_min
+                            cycle_strength = strength_min + diff * cycle / (num_cycles - 1)
+                        else:
+                            cycle_strength = strength_max
+
+                        logger.info(
+                            "Cycle %d: Scheduled distortion strength = %.4f",
+                            cycle + 1,
+                            cycle_strength,
+                        )
+
+                        if dream_generator is not None:
+                            dream_generator.strength = cycle_strength
+                        if nightmare_generator is not None:
+                            nightmare_generator.strength = cycle_strength
+
+                        text_column = self.config.get("dataset", {}).get("text_column", "text")
+                        max_length = self.config.get("model", {}).get("max_length", 128)
+                        batch_size = self.training_config.get("batch_size", 8)
+
+                        if dream_generator is not None and dream_base_dataset is not None:
+                            logger.info(
+                                "Regenerating dream dataset with strength %.4f",
+                                cycle_strength,
+                            )
+                            dream_data = dream_generator.generate(dream_base_dataset)
+                            dream_dataloader = _tokenize_dataset(
+                                dream_data,
+                                self.tokenizer,
+                                text_column,
+                                max_length,
+                                batch_size,
+                            )
+
+                        if nightmare_generator is not None and nightmare_base_dataset is not None:
+                            logger.info(
+                                "Regenerating nightmare dataset with strength %.4f",
+                                cycle_strength,
+                            )
+                            nightmare_data = nightmare_generator.generate(nightmare_base_dataset)
+                            nightmare_dataloader = _tokenize_dataset(
+                                nightmare_data,
+                                self.tokenizer,
+                                text_column,
+                                max_length,
+                                batch_size,
+                            )
 
                 if cycle == getattr(self, "_start_cycle", 0):
                     start_phase = getattr(self, "_start_phase", None)
