@@ -394,10 +394,13 @@ Good documentation is as important as good code. If you're unsure what to update
 
 ## PR checklist
 
+> **Assignment is mandatory.** Do NOT open a PR for an issue you are not assigned to. Request assignment first (see [Issue Assignment Rules](#issue-assignment-rules)). Unassigned PRs will be closed without review.
+
 > **CI runs `make check` on every PR and will block merge if it fails.** Run it locally before pushing to avoid failed checks.
 
 Before requesting review, confirm every box.
 
+- [ ] I am **assigned** to the linked issue.
 - [ ] I have **starred the repo** and **followed [@Adit-Jain-srm](https://github.com/Adit-Jain-srm)**.
 - [ ] `make check` — green locally (runs lint + typecheck + test).
 - [ ] If frontend changed: `make frontend-build` succeeds.
@@ -417,6 +420,17 @@ Before requesting review, confirm every box.
 > **Why acceptance criteria in the PR?** Issues define what "done" looks like. PRs prove it. Copying the acceptance criteria into your PR description creates a verifiable contract: reviewers check the boxes against your code, and incomplete implementations are caught before review begins (not after). If your PR only addresses a subset of the criteria, state that explicitly and link to a follow-up issue for the rest.
 
 CI mirrors the local checks plus a security scan. Merging is blocked on a green CI and one approving review.
+
+### When to request review from maintainer
+
+Only request review (`@Adit-Jain-srm`) when ALL of the following are true:
+
+1. **CI is green** - All Python lint, type-check, and test jobs pass.
+2. **CodeRabbit comments resolved** - Every automated suggestion is either fixed or has a reply explaining why you disagree.
+3. **PR template checklists complete** - All boxes checked in Pre-submission, Quality, and Documentation sections.
+4. **Acceptance criteria met** - Every checkbox from the linked issue is addressed in the PR.
+
+Do NOT request review with failing CI, unresolved bot comments, or unchecked boxes. Premature review requests waste maintainer time and will be dismissed without reading the code.
 
 ---
 
