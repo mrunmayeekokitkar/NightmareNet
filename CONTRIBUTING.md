@@ -55,7 +55,7 @@ Types: `[Feature]`, `[Bug]`, `[Docs]`, `[Refactor]`, `[Test]`, `[Infra]`
    - Any new dependencies required
 
 3. **Acceptance Criteria** - Concrete, checkable items that define "done". Use checkboxes:
-   ```
+   ```markdown
    - [ ] Function X returns correct output for input Y
    - [ ] Tests added covering the new behavior
    - [ ] Documentation updated

@@ -1,4 +1,4 @@
-.PHONY: help test lint typecheck format check frontend-build frontend-test all
+.PHONY: help test lint typecheck format check frontend-build frontend-test all clean
 
 help:
 	@echo "Available targets:"
@@ -38,3 +38,10 @@ frontend-test:
 
 all: check frontend-build
 	@echo "Full check complete."
+
+clean:
+	rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov coverage.xml
+	rm -rf nightmarenet.egg-info dist build
+	rm -rf checkpoints logs results/multi_seed
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	@echo "Cleaned build artifacts."
