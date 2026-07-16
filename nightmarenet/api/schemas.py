@@ -383,6 +383,5 @@ class SettingsWebhooksRequest(BaseModel):
 
 class WebhookTestResponse(BaseModel):
     """Response for testing webhooks, preserving legacy contract."""
-    
+
     status: str = Field(default="ok")
-    
