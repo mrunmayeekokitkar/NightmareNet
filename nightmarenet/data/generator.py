@@ -222,7 +222,6 @@ class NightmareDatasetGenerator:
         if self.strength_min > self.strength_max:
             logger.warning("strength_min > strength_max; schedule will decrease over batch.")
 
-
     @property
     def uses_gradient_learned(self) -> bool:
         """Return whether model-aware learned distortion is enabled."""

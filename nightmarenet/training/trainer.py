@@ -617,10 +617,7 @@ class Trainer:
 
                         if num_cycles > 1:
                             difference = strength_max - strength_min
-                            cycle_strength = (
-                                strength_min
-                                + difference * cycle / (num_cycles - 1)
-                            )
+                            cycle_strength = strength_min + difference * cycle / (num_cycles - 1)
                         else:
                             cycle_strength = strength_max
 
@@ -702,9 +699,7 @@ class Trainer:
                                     else " with current target-model gradients"
                                 ),
                             )
-                            nightmare_data = nightmare_generator.generate(
-                                nightmare_base_dataset
-                            )
+                            nightmare_data = nightmare_generator.generate(nightmare_base_dataset)
                             nightmare_dataloader = _tokenize_dataset(
                                 nightmare_data,
                                 self.tokenizer,

@@ -577,4 +577,3 @@ class LearnedAdversarialGenerator:
 
         self._cache_result(key, result)
         return result
-        
