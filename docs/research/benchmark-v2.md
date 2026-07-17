@@ -121,6 +121,18 @@ Successful execution produced:
 
 These outputs confirm successful execution of the complete four-phase training pipeline using the project's canonical Trainer implementation.
 
+### Quantitative Results
+
+The benchmark was validated on an NVIDIA Tesla T4 GPU using 500 training samples and 200 evaluation samples.
+
+| Metric | Baseline | NightmareNet |
+|--------|---------:|-------------:|
+| Clean Accuracy | 73.00% | 80.50% |
+| Average Distorted Accuracy | 57.25% | 64.25% |
+| Robustness Improvement (Δ) | — | **+7.00 percentage points (+12.23%)** |
+
+Total benchmark wall time: **57.3 seconds**.
+
 
 
 # Comparison with Benchmark v1
@@ -137,6 +149,7 @@ These outputs confirm successful execution of the complete four-phase training p
 | Multi-cycle training | ✗ | ✓ |
 | Production pipeline validation | Partial | Complete |
 | Primary outcome | Adversarial robustness benchmark | End-to-end validation of the full sleep-cycle training workflow |
+| Robustness Improvement | Baseline established in v1 | +7.00 pp (+12.23%) under benchmark configuration
 
 
 Benchmark v1 established the effectiveness of the lightweight Wake → Nightmare adversarial training strategy. Benchmark v2 extends this work by validating the complete production training workflow described in the NightmareNet architecture, demonstrating that the full Wake → Dream → Nightmare → Compression pipeline executes successfully across three consecutive training cycles using the canonical Trainer implementation.
