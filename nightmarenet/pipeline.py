@@ -23,6 +23,7 @@ from nightmarenet.training.trainer import Trainer, _tokenize_dataset
 from nightmarenet.utils.config import load_config
 from nightmarenet.utils.telemetry import record_metric, setup_telemetry, trace_phase
 from nightmarenet.utils.webhooks import trigger_webhook
+from nightmarenet.exceptions import HubUploadError, PipelinePhaseError
 
 logger = logging.getLogger(__name__)
 
@@ -268,9 +269,16 @@ class Pipeline:
                     logger.info("Ingestion complete: %d samples.", len(self._dataset))
                 self.metrics.progress_pct = 8.0
                 self._emit()
-            except Exception as exc:
+            except ValueError as exc:
                 self._fail(f"Ingestion failed: {exc}")
                 raise
+            except Exception as exc:
+                self._fail(f"Ingestion failed: {exc}")
+                raise PipelinePhaseError(
+                    phase="ingest",
+                    cycle=getattr(self.metrics, "current_cycle", None),
+                    details=str(exc),
+                ) from exc
 
     # ------------------------------------------------------------------
     # Stage 1.5: Optimize (optional — Adaption Labs)

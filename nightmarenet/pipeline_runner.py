@@ -13,7 +13,7 @@ import uuid
 from typing import Any, Callable, Optional
 
 from nightmarenet.pipeline import Pipeline
-
+from nightmarenet.exceptions import PipelinePhaseError
 logger = logging.getLogger(__name__)
 
 
@@ -73,8 +73,13 @@ class PipelineRunner:
                 if self._cancel_event.is_set():
                     return
                 self.pipeline.evaluate()
+                _update_run_state(self.id, "complete", time.time(), self.pipeline.metrics.to_dict())
+            except PipelinePhaseError as e:
+                logger.error("Pipeline run %s failed in phase '%s': %s", self.id, e.phase, e)
+                _update_run_state(self.id, "failed", time.time(), self.pipeline.metrics.to_dict())
             except Exception:
-                logger.exception("Pipeline run %s failed", self.id)
+                logger.exception("Pipeline run %s failed unexpectedly", self.id)
+                _update_run_state(self.id, "failed", time.time(), self.pipeline.metrics.to_dict())
 
         self._thread = threading.Thread(target=_run, daemon=True, name=f"pipeline-{self.id}")
         self._thread.start()
