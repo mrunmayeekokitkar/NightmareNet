@@ -555,22 +555,42 @@ class Pipeline:
                 self._dream_base_dataset = dream_base
                 self._nightmare_base_dataset = nightmare_base
 
+                uses_gradient_learned = nightmare_gen.uses_gradient_learned
+                if uses_gradient_learned:
+                    # The target model must exist before cycle-zero nightmare data is
+                    # generated. The disabled and legacy attention paths retain the
+                    # original prepare ordering and avoid loading the model early.
+                    self.callback_manager = CallbackManager()
+                    self._trainer = Trainer(
+                        config=self.config,
+                        distributed=self.distributed,
+                        resume_dir=self.resume_dir,
+                        callback_manager=self.callback_manager,
+                    )
+                    self.callback_manager.on_all(self._on_training_event)
+                    self._trainer.run_id = self.run_id
+                    nightmare_gen.set_target_model(
+                        self._trainer.model,
+                        self._trainer.tokenizer,
+                    )
+                    nightmare_gen.set_cycle(0)
+
                 dream_data = dream_gen.generate(dream_base)
                 nightmare_data = nightmare_gen.generate(nightmare_base)
 
-                # Create trainer (loads model + tokenizer)
-                self.callback_manager = CallbackManager()
-                self._trainer = Trainer(
-                    config=self.config,
-                    distributed=self.distributed,
-                    resume_dir=self.resume_dir,
-                    callback_manager=self.callback_manager,
-                )
-                self.callback_manager.on_all(self._on_training_event)
+                if not uses_gradient_learned:
+                    self.callback_manager = CallbackManager()
+                    self._trainer = Trainer(
+                        config=self.config,
+                        distributed=self.distributed,
+                        resume_dir=self.resume_dir,
+                        callback_manager=self.callback_manager,
+                    )
+                    self.callback_manager.on_all(self._on_training_event)
+                    self._trainer.run_id = self.run_id
 
-                self._trainer.run_id = self.run_id
-
-                # Snapshot baseline model weights for later evaluation
+                # Snapshot baseline model weights for later evaluation. Gradient
+                # generation uses autograd.grad and does not mutate model parameters.
                 self._baseline_model = copy.deepcopy(self._trainer.model)
                 self._baseline_model.eval()
 
