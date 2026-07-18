@@ -46,8 +46,16 @@ class WakePhase:
         callback_manager: Optional[CallbackManager] = None,
         lr_scheduler=None,
     ) -> None:
-        self.gradient_accumulation_steps: int = config.get("gradient_accumulation_steps", 1)
+        self.model = model
+        self.optimizer = optimizer
+        self.config = config
+        self.device = device if isinstance(device, torch.device) else torch.device(device)
+        self.scaler = scaler
         self.model_type = model_type
+        self.callback_manager = callback_manager
+        self.lr_scheduler = lr_scheduler
+        self.max_grad_norm: float = config.get("max_grad_norm", 1.0)
+        self.gradient_accumulation_steps: int = config.get("gradient_accumulation_steps", 1)
 
     def run(self, dataloader: DataLoader, num_epochs: int = 1) -> dict:
         """Run the wake phase (standard training).
