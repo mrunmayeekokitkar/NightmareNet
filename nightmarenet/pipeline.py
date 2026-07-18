@@ -700,15 +700,15 @@ class Pipeline:
         }
         start = time.time()
         with trace_phase("train", train_attrs):
-            try:
-                stop_gpu_sampling = threading.Event()
+            stop_gpu_sampling = threading.Event()
 
-                gpu_sampler = threading.Thread(
+            gpu_sampler = threading.Thread(
                     target=self._gpu_sampling_loop,
                     args=(stop_gpu_sampling,),
                     daemon=True,
                 )
 
+            try:
                 gpu_sampler.start()
                 history = self._trainer.train(
                     train_dataloader=self._train_dl,
@@ -949,7 +949,7 @@ class Pipeline:
                             # Extract metadata from comparison results and configuration
                             pipeline_metadata = {
                                 "robustness_score": float(
-                                    comparison.get("robustness_score", 0.0)
+                                    robustness_delta if robustness_delta is not None else 0.0
                                 ),
                                 "training_config": self.config,
                             }

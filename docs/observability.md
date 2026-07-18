@@ -35,13 +35,16 @@ http://localhost:16686
 
 ## Enabling OpenTelemetry
 
-Configure your OTLP endpoint in your environment:
+Configure the OTLP endpoint in your NightmareNet configuration:
 
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+```yaml
+observability:
+  otel_endpoint: http://localhost:4317
 ```
 
-Then start the API normally.
+Telemetry will only be enabled when `observability.otel_endpoint`
+is configured. If omitted, NightmareNet automatically falls back to
+its built-in no-op telemetry implementation.
 
 ---
 
