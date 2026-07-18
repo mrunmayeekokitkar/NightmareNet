@@ -20,6 +20,7 @@ from nightmarenet.data.ingest import DataIngestor
 from nightmarenet.distortions.text import apply_text_distortions
 from nightmarenet.evaluation.evaluator import Evaluator
 from nightmarenet.evaluation.metrics import evaluate_cycle, quick_robustness_score
+from nightmarenet.exceptions import PipelinePhaseError
 from nightmarenet.training.callbacks import CallbackManager, TrainingEvent
 from nightmarenet.training.trainer import Trainer, _tokenize_dataset
 from nightmarenet.utils.config import load_config
@@ -309,9 +310,16 @@ class Pipeline:
                     logger.info("Ingestion complete: %d samples.", len(self._dataset))
                 self.metrics.progress_pct = 8.0
                 self._emit()
-            except Exception as exc:
+            except ValueError as exc:
                 self._fail(f"Ingestion failed: {exc}")
                 raise
+            except Exception as exc:
+                self._fail(f"Ingestion failed: {exc}")
+                raise PipelinePhaseError(
+                    phase="ingest",
+                    cycle=getattr(self.metrics, "current_cycle", None),
+                    details=str(exc),
+                ) from exc
 
     # ------------------------------------------------------------------
     # Stage 1.5: Optimize (optional — Adaption Labs)
