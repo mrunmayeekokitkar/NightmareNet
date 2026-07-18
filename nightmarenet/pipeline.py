@@ -20,6 +20,7 @@ from nightmarenet.data.ingest import DataIngestor
 from nightmarenet.distortions.text import apply_text_distortions
 from nightmarenet.evaluation.evaluator import Evaluator
 from nightmarenet.evaluation.metrics import evaluate_cycle, quick_robustness_score
+from nightmarenet.exceptions import PipelinePhaseError
 from nightmarenet.training.callbacks import CallbackManager, TrainingEvent
 from nightmarenet.training.trainer import Trainer, _tokenize_dataset
 from nightmarenet.utils.config import load_config
@@ -309,9 +310,16 @@ class Pipeline:
                     logger.info("Ingestion complete: %d samples.", len(self._dataset))
                 self.metrics.progress_pct = 8.0
                 self._emit()
-            except Exception as exc:
+            except ValueError as exc:
                 self._fail(f"Ingestion failed: {exc}")
                 raise
+            except Exception as exc:
+                self._fail(f"Ingestion failed: {exc}")
+                raise PipelinePhaseError(
+                    phase="ingest",
+                    cycle=getattr(self.metrics, "current_cycle", None),
+                    details=str(exc),
+                ) from exc
 
     # ------------------------------------------------------------------
     # Stage 1.5: Optimize (optional — Adaption Labs)
@@ -555,22 +563,42 @@ class Pipeline:
                 self._dream_base_dataset = dream_base
                 self._nightmare_base_dataset = nightmare_base
 
+                uses_gradient_learned = nightmare_gen.uses_gradient_learned
+                if uses_gradient_learned:
+                    # The target model must exist before cycle-zero nightmare data is
+                    # generated. The disabled and legacy attention paths retain the
+                    # original prepare ordering and avoid loading the model early.
+                    self.callback_manager = CallbackManager()
+                    self._trainer = Trainer(
+                        config=self.config,
+                        distributed=self.distributed,
+                        resume_dir=self.resume_dir,
+                        callback_manager=self.callback_manager,
+                    )
+                    self.callback_manager.on_all(self._on_training_event)
+                    self._trainer.run_id = self.run_id
+                    nightmare_gen.set_target_model(
+                        self._trainer.model,
+                        self._trainer.tokenizer,
+                    )
+                    nightmare_gen.set_cycle(0)
+
                 dream_data = dream_gen.generate(dream_base)
                 nightmare_data = nightmare_gen.generate(nightmare_base)
 
-                # Create trainer (loads model + tokenizer)
-                self.callback_manager = CallbackManager()
-                self._trainer = Trainer(
-                    config=self.config,
-                    distributed=self.distributed,
-                    resume_dir=self.resume_dir,
-                    callback_manager=self.callback_manager,
-                )
-                self.callback_manager.on_all(self._on_training_event)
+                if not uses_gradient_learned:
+                    self.callback_manager = CallbackManager()
+                    self._trainer = Trainer(
+                        config=self.config,
+                        distributed=self.distributed,
+                        resume_dir=self.resume_dir,
+                        callback_manager=self.callback_manager,
+                    )
+                    self.callback_manager.on_all(self._on_training_event)
+                    self._trainer.run_id = self.run_id
 
-                self._trainer.run_id = self.run_id
-
-                # Snapshot baseline model weights for later evaluation
+                # Snapshot baseline model weights for later evaluation. Gradient
+                # generation uses autograd.grad and does not mutate model parameters.
                 self._baseline_model = copy.deepcopy(self._trainer.model)
                 self._baseline_model.eval()
 
@@ -884,8 +912,10 @@ class Pipeline:
 
                             # Extract metadata from comparison results and configuration
                             pipeline_metadata = {
-                                "robustness_score": float(comparison.get("robustness_score", 0.0)),
-                                "training_config": self.config
+                                "robustness_score": float(
+                                    robustness_delta if robustness_delta is not None else 0.0
+                                ),
+                                "training_config": self.config,
                             }
 
                             # Save the metadata temporarily inside the exported directory
@@ -897,7 +927,7 @@ class Pipeline:
                             push_model(
                                 model_dir=tmp_dir,
                                 repo_id=auto_push_repo,
-                                metadata_path=metadata_file_path
+                                metadata_path=metadata_file_path,
                             )
                     except Exception as upload_err:
                         logger.error("Push failed: %s", upload_err)
@@ -1005,6 +1035,7 @@ class Pipeline:
             self.export(export_dir)
 
         return comparison
+
 
 def create_pipeline_from_config(
     config_path: str = "configs/default.yaml",
