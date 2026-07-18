@@ -127,7 +127,6 @@ _cors_origins = [
     o.strip()
     for o in os.environ.get("NIGHTMARENET_CORS_ORIGINS", "*").split(",")
     if o.strip()
-    o.strip() for o in os.environ.get("NIGHTMARENET_CORS_ORIGINS", "*").split(",") if o.strip()
 ]
 if not _cors_origins:
     logger.warning(
