@@ -48,7 +48,9 @@ jobs:
                 "**Contributors:** PR checks merge your branch with current `main`,",
                 "so your PR CI may fail on code you never touched. If your failures",
                 "point at files outside your diff, wait for this issue to close,",
-                "then re-run your PR checks (push a commit or use *Re-run jobs*).",
+                "then update your branch (merge `main` in, or click *Update branch*).",
+                "Note: *Re-run jobs* re-tests the same merge snapshot and will NOT",
+                "pick up the fixed `main`.",
               ].join("\n");
               if (existing) {
                 await github.rest.issues.createComment({
@@ -73,7 +75,9 @@ jobs:
                 issue_number: existing.number,
                 body:
                   `CI on \`main\` is green again as of \`${sha}\`: ${runUrl}\n\n` +
-                  "If your PR failed during this window, re-run its checks now.",
+                  "If your PR failed during this window, update your branch " +
+                  "(merge `main` in, or click *Update branch* on the PR) to " +
+                  "get a fresh merge commit, then let CI re-run.",
               });
               await github.rest.issues.update({
                 owner: context.repo.owner,

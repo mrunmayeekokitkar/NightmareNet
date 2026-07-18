@@ -447,9 +447,11 @@ Before debugging, triage in this order:
    `main`'s breakage inside your PR.
 3. **Check `main`'s latest [CI runs](../../actions/workflows/ci.yml?query=branch%3Amain).**
    If the newest run on `main` is red with the same failure, same conclusion.
-4. **Once `main` is green again**, re-run your PR checks: push any commit
-   (e.g. rebase or merge `main` into your branch) or use the **Re-run jobs**
-   button on the failed run.
+4. **Once `main` is green again**, refresh your PR: merge `main` into your
+   branch (or rebase) and push, or click **Update branch** on the PR page.
+   Note: the **Re-run jobs** button re-tests the *same* merge snapshot
+   (GitHub reuses the original `GITHUB_SHA`), so it will NOT pick up the
+   fixed `main` — you must update the branch to get a fresh merge commit.
 
 If none of the above applies and the failure persists on files outside your
 diff, comment on your PR with the failing test name and your local
