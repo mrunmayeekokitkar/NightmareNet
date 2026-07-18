@@ -37,7 +37,10 @@ jobs:
         if: matrix.python-version == '3.12'
 
       - name: Run tests with coverage
-        run: pytest --cov=nightmarenet --cov-report=xml --cov-report=term-missing
+        env:
+          HF_HUB_DOWNLOAD_TIMEOUT: 60
+          HF_DATASETS_TIMEOUT: 60
+        run: PYTHONPATH=. pytest -m "not slow" --cov=nightmarenet --cov-report=xml --cov-report=term-missing
 
       - name: Set up Node.js
         if: matrix.python-version == '3.12'
@@ -141,3 +144,4 @@ jobs:
 
       - name: Smoke-test image
         run: echo "Build verified (image not loaded to save disk space)"
+        

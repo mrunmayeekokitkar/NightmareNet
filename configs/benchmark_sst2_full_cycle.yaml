@@ -31,7 +31,9 @@ compression:
 
 evaluation:
   strengths: [0.1, 0.3, 0.5, 0.7, 0.9]
-  seed: 42
 
 tracking:
   enabled: false
+
+# Reproducibility (read at root level by scripts/train.py via config.get("seed"))
+seed: 42

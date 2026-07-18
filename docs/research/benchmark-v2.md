@@ -23,14 +23,9 @@ Benchmark v1 demonstrated the effectiveness of the Wake → Nightmare adversaria
 
 This benchmark addresses that gap by validating the full four-phase pipeline:
 
-```
-Wake
-    ↓
-Dream
-    ↓
-Nightmare
-    ↓
-Compression
+```mermaid
+flowchart LR
+    Wake --> Dream --> Nightmare --> Compression
 ```
 
 executed for **3 consecutive cycles**.
@@ -96,7 +91,7 @@ These changes ensure that Benchmark v2 validates the production NightmareNet tra
 
 The benchmark successfully completed the full configured training workflow.
 
-### Pipeline Validation
+## Pipeline Validation
 
 | Phase | Status |
 |--------|--------|
@@ -109,7 +104,7 @@ Configured cycles completed: **3 / 3**
 
 Execution completed successfully on NVIDIA Tesla T4 without runtime failures.
 
-### Benchmark Outputs
+## Benchmark Outputs
 
 Successful execution produced:
 
@@ -121,7 +116,7 @@ Successful execution produced:
 
 These outputs confirm successful execution of the complete four-phase training pipeline using the project's canonical Trainer implementation.
 
-### Quantitative Results
+## Quantitative Results
 
 The benchmark was validated on an NVIDIA Tesla T4 GPU using 500 training samples and 200 evaluation samples.
 
@@ -132,6 +127,11 @@ The benchmark was validated on an NVIDIA Tesla T4 GPU using 500 training samples
 | Robustness Improvement (Δ) | — | **+7.00 percentage points (+12.23%)** |
 
 Total benchmark wall time: **57.3 seconds**.
+
+> **Per-phase timing is not reported.** The canonical Trainer (`scripts/train.py`)
+> emits only aggregate wall time, not a per-phase (Wake/Dream/Nightmare/Compression)
+> breakdown. Adding per-phase instrumentation is tracked as future work rather than
+> fabricated here, so only the measured total is stated.
 
 
 
@@ -149,7 +149,7 @@ Total benchmark wall time: **57.3 seconds**.
 | Multi-cycle training | ✗ | ✓ |
 | Production pipeline validation | Partial | Complete |
 | Primary outcome | Adversarial robustness benchmark | End-to-end validation of the full sleep-cycle training workflow |
-| Robustness Improvement | Baseline established in v1 | +7.00 pp (+12.23%) under benchmark configuration
+| Robustness Improvement | Baseline established in v1 | +7.00 pp (+12.23%) under benchmark configuration |
 
 
 Benchmark v1 established the effectiveness of the lightweight Wake → Nightmare adversarial training strategy. Benchmark v2 extends this work by validating the complete production training workflow described in the NightmareNet architecture, demonstrating that the full Wake → Dream → Nightmare → Compression pipeline executes successfully across three consecutive training cycles using the canonical Trainer implementation.
@@ -177,11 +177,11 @@ The benchmark completed successfully without modification on Kaggle GPU infrastr
 
 # Limitations
 
-This benchmark validates successful execution of the complete multi-cycle training pipeline.
+This benchmark validates successful execution of the complete multi-cycle training pipeline and reports aggregate (end-to-end) robustness improvement.
 
-Per-cycle robustness measurements are not currently recorded by the training pipeline, so robustness accumulation across cycles is not quantified in this benchmark.
+**Scope note — robustness accumulation across cycles is out of scope for this benchmark.** The original objective included validating the "robustness accumulates across cycles" claim, but per-cycle robustness measurements are not currently recorded by the training pipeline. Rather than infer or fabricate a per-cycle progression, this benchmark reports only the measured end-to-end delta (+7.00 pp). Quantifying accumulation requires evaluating intermediate checkpoints after each cycle.
 
-Future work may evaluate intermediate checkpoints after each cycle to measure robustness progression throughout training.
+Future work: instrument the Trainer to evaluate robustness on the held-out set after each cycle (and per phase), producing both a per-cycle accumulation curve and a per-phase timing breakdown. This is deferred to a follow-up PR to keep this change focused on validating full-pipeline execution.
 
 ---
 

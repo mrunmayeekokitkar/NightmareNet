@@ -49,6 +49,7 @@ AGENTS.md
 frontend/AGENTS.md
 Prompt.md
 skills-lock.json
+pr_*.md
 
 # Node / Frontend
 node_modules/
@@ -94,3 +95,7 @@ nightmarenet-overview.md
 Plan.md
 lint_output.txt
 skills-lock.json
+
+.vercel
+coverage.xml
+.nightmarenet_cache/

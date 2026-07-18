@@ -1,0 +1,21 @@
+models:
+  - "distilbert-base-uncased"
+  - "roberta-base"
+  - "bert-base-uncased"
+
+dataset:
+  name: "sst2"
+  split: "validation"
+  max_samples: 100
+  text_column: "sentence"
+  label_column: "label"
+
+distortions:
+  - type: "dream"
+    strengths: [0.1, 0.3, 0.5, 0.7, 0.9]
+  - type: "nightmare"
+    strengths: [0.1, 0.3, 0.5, 0.7, 0.9]
+
+output:
+  formats: ["json", "csv", "latex"]
+  directory: "./results/ensemble-v1"

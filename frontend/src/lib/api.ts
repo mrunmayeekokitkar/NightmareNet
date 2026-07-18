@@ -248,6 +248,7 @@ export interface PipelineCreateRequest {
   max_samples?: number;
   dream_strength?: number;
   nightmare_strength?: number;
+  webhooks?: { url: string; events: string[] }[];
 }
 
 export interface PipelineStatusResponse {
@@ -581,6 +582,32 @@ export function suggestConfig(body: SuggestConfigRequest): Promise<SuggestConfig
   });
 }
 
+// --- Experiment Search ---
+
+export interface ExperimentSearchResult {
+  run_id: string;
+  relevance_score: number;
+  summary: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface ExperimentSearchResponse {
+  results: ExperimentSearchResult[];
+  filters: Record<string, unknown>;
+  backend: string;
+}
+
+export function searchExperiments(
+  query: string,
+  topK = 10,
+  filters?: Record<string, unknown>,
+): Promise<ExperimentSearchResponse> {
+  return apiFetch<ExperimentSearchResponse>("/api/v1/search", {
+    method: "POST",
+    body: JSON.stringify({ query, top_k: topK, filters: filters ?? {} }),
+  });
+}
+
 // --- Adaption Labs: Import & Estimate ---
 
 export function importAndOptimize(body: DataImportRequest): Promise<DataOptimizeResponse> {
@@ -592,6 +619,20 @@ export function importAndOptimize(body: DataImportRequest): Promise<DataOptimize
 
 export function estimateOptimization(body: DataOptimizeRequest): Promise<DataOptimizeResponse> {
   return apiFetch<DataOptimizeResponse>("/api/v1/data/optimize/estimate", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+// --- Notifications & Webhooks ---
+
+export interface TestWebhookRequest {
+  url: string;
+  event_type: string;
+}
+
+export function testWebhook(body: TestWebhookRequest): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>("/api/v1/notifications/test-webhook", {
     method: "POST",
     body: JSON.stringify(body),
   });

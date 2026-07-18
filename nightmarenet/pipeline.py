@@ -14,12 +14,19 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
+from nightmarenet.compliance.report import generate_report
 from nightmarenet.data.generator import create_generators_from_config
 from nightmarenet.data.ingest import DataIngestor
+from nightmarenet.distortions.text import apply_text_distortions
 from nightmarenet.evaluation.evaluator import Evaluator
+from nightmarenet.evaluation.metrics import evaluate_cycle, quick_robustness_score
+from nightmarenet.exceptions import PipelinePhaseError
+from nightmarenet.training.callbacks import CallbackManager, TrainingEvent
 from nightmarenet.training.trainer import Trainer, _tokenize_dataset
 from nightmarenet.utils.config import load_config
 from nightmarenet.utils.telemetry import record_metric, setup_telemetry, trace_phase
+from nightmarenet.utils.tracking import create_tracker_from_config
+from nightmarenet.utils.webhooks import trigger_webhook
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +63,9 @@ class PipelineMetrics:
     report_md: Optional[str] = None
     adaption_quality: Optional[dict] = None
     quality_feedback: Optional[dict] = None
+    per_cycle_metrics: list[dict] = field(
+        default_factory=list
+    )  # <-- add this, remove the duplicate `history` line
 
     def to_dict(self) -> dict:
         return {
@@ -67,6 +77,7 @@ class PipelineMetrics:
             "progress_pct": round(self.progress_pct, 2),
             "eta_seconds": round(self.eta_seconds, 1),
             "history": self.history,
+            "per_cycle_metrics": self.per_cycle_metrics,  # <-- expose to dashboard
             "error": self.error,
             "has_report": self.report_md is not None,
         }
@@ -94,14 +105,25 @@ class Pipeline:
         self,
         config: dict,
         on_event: Optional[Callable[[dict], None]] = None,
+        run_id: Optional[str] = None,
+        distributed: Optional[str] = None,
+        resume_dir: Optional[str] = None,
     ) -> None:
+        import uuid
+
+        self.run_id = run_id or str(uuid.uuid4())
         self.config = config
         self.on_event = on_event
+        self.distributed = distributed
+        self.resume_dir = resume_dir
         self.metrics = PipelineMetrics()
         self._cancelled = False
 
         # Initialise OTel tracing + metrics (no-op if endpoint not configured)
         setup_telemetry(config)
+
+        self.tracker = create_tracker_from_config(config)
+        self.tracker.log_config(config)
 
         # Populated by each stage
         self._dataset = None
@@ -109,15 +131,31 @@ class Pipeline:
         self._dream_base = None
         self._nightmare_base = None
         self._train_dl = None
+        self._eval_dl = None
         self._dream_dl = None
         self._nightmare_dl = None
         self._val_dl = None
         self._trainer: Optional[Trainer] = None
         self._baseline_model = None
+        # Held-out evaluation references (set during prepare())
+        self._eval_dataset = None
+        self._distortion_fn: Optional[Callable] = None
+        # Adaptive cycle termination state
+        self._last_robustness_score: Optional[float] = None
+        self._convergence_count = 0
+        self._final_convergence_delta: Optional[float] = None
+        self._cycles_completed = 0
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _on_training_event(self, event: TrainingEvent) -> None:
+        logger.debug(
+            "Training event: %s (%s)",
+            event.event_type.value,
+            event.phase,
+        )
 
     def _emit(self) -> None:
         if self.on_event is not None:
@@ -134,6 +172,77 @@ class Pipeline:
         self.metrics.status = PipelineStatus.FAILED
         self.metrics.error = error
         self._emit()
+
+        trigger_webhook(
+            self.config,
+            "run_complete",
+            "Pipeline run failed.",
+            {
+                "run_id": self.run_id,
+                "status": "failed",
+                "error": error,
+                "model": self.config.get("model", {}).get("name", "unknown"),
+            },
+        )
+
+    def _handle_cycle_end(self, event: dict) -> None:
+        """Handle per-cycle evaluation and adaptive convergence detection."""
+        if self._trainer is not None and self._eval_dl is not None:
+            try:
+                metrics = evaluate_cycle(
+                    model=self._trainer.model,
+                    dataloader=self._eval_dl,
+                    tokenizer=self._trainer.tokenizer,
+                    base_dataset=self._eval_dataset,
+                    distortion_fn=self._distortion_fn,
+                    text_column=self.config.get("dataset", {}).get("text_column", "text"),
+                    max_length=self.config.get("model", {}).get("max_length", 128),
+                    batch_size=self.config.get("training", {}).get("batch_size", 8),
+                    device=str(self._trainer.device),
+                )
+                metrics["cycle"] = event.get("cycle", 0)
+                self.metrics.per_cycle_metrics.append(metrics)
+                self._emit()
+            except Exception:
+                logger.exception("Per-cycle evaluation failed; continuing training.")
+
+        if self._trainer is None:
+            return
+        training_cfg = self.config.get("training", {})
+        auto_terminate = training_cfg.get("auto_terminate", False)
+        threshold = training_cfg.get("convergence_threshold", 0.005)
+        patience = training_cfg.get("convergence_patience", 2)
+        if auto_terminate:
+            score = quick_robustness_score(
+                model=self._trainer.model,
+                base_dataset=self._dataset,
+                tokenizer=self._trainer.tokenizer,
+                distortion_fn=apply_text_distortions,
+                strength=0.5,
+                text_column=self.config.get("dataset", {}).get("text_column", "text"),
+                max_length=self.config.get("model", {}).get("max_length", 128),
+                batch_size=training_cfg.get("batch_size", 8),
+                device=str(self._trainer.device),
+            )
+            if self._last_robustness_score is None:
+                self._last_robustness_score = score
+                self._cycles_completed = event.get("cycle", 0) + 1
+            else:
+                delta = abs(score - self._last_robustness_score)
+                self._final_convergence_delta = delta
+                if delta < threshold:
+                    self._convergence_count += 1
+                else:
+                    self._convergence_count = 0
+                self._last_robustness_score = score
+                self._cycles_completed = event.get("cycle", 0) + 1
+                if self._convergence_count >= patience and self._trainer is not None:
+                    logger.info(
+                        "Robustness converged after %d cycles (delta=%.6f).",
+                        self._cycles_completed,
+                        delta,
+                    )
+                    self._trainer.request_stop()
 
     def cancel(self) -> None:
         """Request graceful cancellation of a running pipeline."""
@@ -177,7 +286,8 @@ class Pipeline:
 
         span_attrs = {
             "source": (
-                "urls" if urls
+                "urls"
+                if urls
                 else ("file" if file_path else ("text" if text_content else "huggingface"))
             ),
             "dataset.name": dataset_cfg.get("name", ""),
@@ -200,9 +310,16 @@ class Pipeline:
                     logger.info("Ingestion complete: %d samples.", len(self._dataset))
                 self.metrics.progress_pct = 8.0
                 self._emit()
-            except Exception as exc:
+            except ValueError as exc:
                 self._fail(f"Ingestion failed: {exc}")
                 raise
+            except Exception as exc:
+                self._fail(f"Ingestion failed: {exc}")
+                raise PipelinePhaseError(
+                    phase="ingest",
+                    cycle=getattr(self.metrics, "current_cycle", None),
+                    details=str(exc),
+                ) from exc
 
     # ------------------------------------------------------------------
     # Stage 1.5: Optimize (optional — Adaption Labs)
@@ -259,21 +376,21 @@ class Pipeline:
             # Estimate-first gating
             if adaption_cfg.get("estimate_first", False):
                 try:
-                    estimate = optimizer.estimate_cost(
-                        self._dataset, column_mapping
-                    )
+                    estimate = optimizer.estimate_cost(self._dataset, column_mapping)
                     if estimate:
                         max_credits = adaption_cfg.get("max_credits", 100)
                         if estimate["credits"] > max_credits:
                             logger.warning(
                                 "Adaption estimated %.1f credits (budget: %.1f). "
                                 "Skipping optimization.",
-                                estimate["credits"], max_credits,
+                                estimate["credits"],
+                                max_credits,
                             )
                             return
                         logger.info(
                             "Adaption estimate: %.1f credits, ~%.1f min",
-                            estimate["credits"], estimate["estimated_minutes"],
+                            estimate["credits"],
+                            estimate["estimated_minutes"],
                         )
                 except Exception:
                     logger.warning("Estimate check failed; proceeding anyway.", exc_info=True)
@@ -364,16 +481,17 @@ class Pipeline:
                     elif phase_name == "nightmare":
                         self._nightmare_base = optimized_dataset
 
-                    logger.info(
-                        "Phase '%s' optimization complete: %s", phase_name, quality
-                    )
+                    logger.info("Phase '%s' optimization complete: %s", phase_name, quality)
                 else:
                     logger.warning(
-                        "Phase '%s' optimization returned None; using original.", phase_name
+                        "Phase '%s' optimization returned None; using original.",
+                        phase_name,
                     )
             except Exception:
                 logger.warning(
-                    "Phase '%s' optimization failed; using original.", phase_name, exc_info=True
+                    "Phase '%s' optimization failed; using original.",
+                    phase_name,
+                    exc_info=True,
                 )
 
     # ------------------------------------------------------------------
@@ -398,19 +516,89 @@ class Pipeline:
             try:
                 dream_gen, nightmare_gen = create_generators_from_config(self.config)
 
-                wake_data = self._wake_dataset if self._wake_dataset is not None else self._dataset
+                # ── Train / eval split ──────────────────────────────────────
+                # Reserve a held-out fraction for post-training evaluation so
+                # we do not measure performance on the same data we trained on.
+                _min_eval_samples = 25
+                eval_split_ratio = self.config.get("evaluation", {}).get("eval_split_ratio", 0.2)
+                base_for_split = (
+                    self._wake_dataset if self._wake_dataset is not None else self._dataset
+                )
+                n_total = len(base_for_split)  # type: ignore[arg-type]
+
+                if eval_split_ratio > 0.0 and n_total >= _min_eval_samples:
+                    n_eval = max(1, int(n_total * eval_split_ratio))
+                    n_train = n_total - n_eval
+                    train_indices = list(range(n_train))
+                    eval_indices = list(range(n_train, n_total))
+                    wake_data = base_for_split.select(train_indices)
+                    self._eval_dataset = base_for_split.select(eval_indices)
+                    logger.info(
+                        "Train/eval split: %d train, %d eval (ratio=%.2f).",
+                        n_train,
+                        n_eval,
+                        eval_split_ratio,
+                    )
+                else:
+                    if eval_split_ratio > 0.0:
+                        logger.warning(
+                            "Dataset has only %d samples (minimum %d for splitting). "
+                            "Using full dataset for both training and evaluation.",
+                            n_total,
+                            _min_eval_samples,
+                        )
+                    wake_data = base_for_split
+                    self._eval_dataset = base_for_split
+
+                # Save reference distortion function for robustness evaluation
+                self._distortion_fn = apply_text_distortions
+
                 dream_base = self._dream_base if self._dream_base is not None else self._dataset
                 nightmare_base = (
                     self._nightmare_base if self._nightmare_base is not None else self._dataset
                 )
 
+                self._dream_generator = dream_gen
+                self._nightmare_generator = nightmare_gen
+                self._dream_base_dataset = dream_base
+                self._nightmare_base_dataset = nightmare_base
+
+                uses_gradient_learned = nightmare_gen.uses_gradient_learned
+                if uses_gradient_learned:
+                    # The target model must exist before cycle-zero nightmare data is
+                    # generated. The disabled and legacy attention paths retain the
+                    # original prepare ordering and avoid loading the model early.
+                    self.callback_manager = CallbackManager()
+                    self._trainer = Trainer(
+                        config=self.config,
+                        distributed=self.distributed,
+                        resume_dir=self.resume_dir,
+                        callback_manager=self.callback_manager,
+                    )
+                    self.callback_manager.on_all(self._on_training_event)
+                    self._trainer.run_id = self.run_id
+                    nightmare_gen.set_target_model(
+                        self._trainer.model,
+                        self._trainer.tokenizer,
+                    )
+                    nightmare_gen.set_cycle(0)
+
                 dream_data = dream_gen.generate(dream_base)
                 nightmare_data = nightmare_gen.generate(nightmare_base)
 
-                # Create trainer (loads model + tokenizer)
-                self._trainer = Trainer(config=self.config)
+                if not uses_gradient_learned:
+                    self.callback_manager = CallbackManager()
+                    self._trainer = Trainer(
+                        config=self.config,
+                        distributed=self.distributed,
+                        resume_dir=self.resume_dir,
+                        callback_manager=self.callback_manager,
+                    )
+                    self.callback_manager.on_all(self._on_training_event)
+                    self._trainer.run_id = self.run_id
 
-                # Snapshot baseline model weights for later evaluation
+                # Snapshot baseline model weights for later evaluation. Gradient
+                # generation uses autograd.grad and does not mutate model parameters.
                 self._baseline_model = copy.deepcopy(self._trainer.model)
                 self._baseline_model.eval()
 
@@ -420,16 +608,32 @@ class Pipeline:
                 batch_size = self.config.get("training", {}).get("batch_size", 8)
 
                 self._train_dl = _tokenize_dataset(
-                    wake_data, self._trainer.tokenizer,
-                    text_column, max_length, batch_size,
+                    wake_data,
+                    self._trainer.tokenizer,
+                    text_column,
+                    max_length,
+                    batch_size,
+                )
+                self._eval_dl = _tokenize_dataset(
+                    self._eval_dataset,
+                    self._trainer.tokenizer,
+                    text_column,
+                    max_length,
+                    batch_size,
                 )
                 self._dream_dl = _tokenize_dataset(
-                    dream_data, self._trainer.tokenizer,
-                    text_column, max_length, batch_size,
+                    dream_data,
+                    self._trainer.tokenizer,
+                    text_column,
+                    max_length,
+                    batch_size,
                 )
                 self._nightmare_dl = _tokenize_dataset(
-                    nightmare_data, self._trainer.tokenizer,
-                    text_column, max_length, batch_size,
+                    nightmare_data,
+                    self._trainer.tokenizer,
+                    text_column,
+                    max_length,
+                    batch_size,
                 )
                 logger.info("Preparation complete: dataloaders ready.")
                 self.metrics.progress_pct = 15.0
@@ -474,6 +678,8 @@ class Pipeline:
             history = event.get("history")
             if history is not None:
                 self.metrics.history = history
+            if event.get("event") == "cycle_end":
+                self._handle_cycle_end(event)
             self._emit()
 
         train_attrs = {
@@ -489,7 +695,20 @@ class Pipeline:
                     nightmare_dataloader=self._nightmare_dl,
                     val_dataloader=self._val_dl,
                     on_progress=_on_train_progress,
+                    dream_generator=getattr(self, "_dream_generator", None),
+                    nightmare_generator=getattr(self, "_nightmare_generator", None),
+                    dream_base_dataset=getattr(self, "_dream_base_dataset", None),
+                    nightmare_base_dataset=getattr(self, "_nightmare_base_dataset", None),
                 )
+
+                # Log training lineage for compliance reporting
+                if history:
+                    for record in history:
+                        self.tracker.log_phase(
+                            cycle=record.get("cycle", 0),
+                            phase=record.get("phase", "unknown"),
+                            metrics=record,
+                        )
 
                 # Update metrics from history
                 self.metrics.history = history
@@ -537,9 +756,16 @@ class Pipeline:
                     device=str(self._trainer.device),
                 )
 
+                # Use the held-out eval DataLoader so we never measure on
+                # training data; fall back to train_dl only if eval_dl is
+                # unavailable (should not happen in practice).
+                clean_dl = self._eval_dl if self._eval_dl is not None else self._train_dl
+
                 # Evaluate trained model
                 trained_results = evaluator.evaluate(
-                    clean_dataloader=self._train_dl,
+                    clean_dataloader=clean_dl,
+                    base_dataset=self._eval_dataset,
+                    distortion_fn=self._distortion_fn,
                     label="nightmarenet-trained",
                 )
                 self.metrics.trained_results = trained_results
@@ -552,13 +778,23 @@ class Pipeline:
                     device=str(self._trainer.device),
                 )
                 baseline_results = baseline_evaluator.evaluate(
-                    clean_dataloader=self._train_dl,
+                    clean_dataloader=clean_dl,
+                    base_dataset=self._eval_dataset,
+                    distortion_fn=self._distortion_fn,
                     label="baseline",
                 )
                 self.metrics.baseline_results = baseline_results
 
                 # Generate comparison
                 comparison = evaluator.compare(baseline_results, trained_results)
+                comparison["convergence"] = {
+                    "cycles_completed": self._cycles_completed,
+                    "final_delta": self._final_convergence_delta,
+                    "auto_terminated": (
+                        self._convergence_count
+                        >= self.config.get("training", {}).get("convergence_patience", 2)
+                    ),
+                }
                 self.metrics.comparison = comparison
 
                 # Generate markdown report
@@ -573,6 +809,31 @@ class Pipeline:
                 }
                 evaluator.save_results(results_dict)
 
+                # ---------------------------------------------------------
+                # Generate EU AI Act Article 15 compliance report
+                # ---------------------------------------------------------
+                tracking_cfg = self.config.get("tracking", {})
+
+                if tracking_cfg.get("compliance_report", False):
+                    output_dir = tracking_cfg.get("output_dir", "results")
+
+                    model_path = ""
+                    training_cfg = self.config.get("training", {})
+                    checkpoint_dir = training_cfg.get("checkpoint_dir")
+
+                    if checkpoint_dir:
+                        model_path = checkpoint_dir
+
+                    generate_report(
+                        config=self.config,
+                        comparison=comparison,
+                        model_path=model_path,
+                        output_dir=output_dir,
+                        tracker=self.tracker,
+                    )
+
+                    logger.info("Compliance report generated.")
+
                 self.metrics.progress_pct = 100.0
                 self.metrics.current_phase = "complete"
                 self._set_status(PipelineStatus.COMPLETE)
@@ -580,14 +841,96 @@ class Pipeline:
 
                 self._compute_quality_feedback(comparison)
 
+                # Trigger webhook for run_complete (success)
+                robustness_metric = comparison.get("metrics", {}).get("robustness", {})
+                robustness_delta = robustness_metric.get("deltas", {}).get("auc_robustness")
+                if robustness_delta is None:
+                    robustness_delta = comparison.get("robustness_delta")
+
+                trigger_webhook(
+                    self.config,
+                    "run_complete",
+                    "Pipeline run completed successfully.",
+                    {
+                        "run_id": self.run_id,
+                        "status": "complete",
+                        "model": self.config.get("model", {}).get("name", "unknown"),
+                        "robustness_delta": (
+                            f"{robustness_delta:+.4f}"
+                            if isinstance(robustness_delta, float)
+                            else "N/A"
+                        ),
+                    },
+                )
+
+                # Trigger webhook for regression_detected
+                if isinstance(robustness_delta, (int, float)) and robustness_delta < 0:
+                    baseline_auc = robustness_metric.get("baseline", {}).get(
+                        "auc_robustness", "N/A"
+                    )
+                    trained_auc = robustness_metric.get("trained", {}).get("auc_robustness", "N/A")
+                    trigger_webhook(
+                        self.config,
+                        "regression_detected",
+                        (
+                            "Robustness regression detected after training! "
+                            f"Drop: {robustness_delta:+.4f}"
+                        ),
+                        {
+                            "run_id": self.run_id,
+                            "model": self.config.get("model", {}).get("name", "unknown"),
+                            "robustness_delta": f"{robustness_delta:+.4f}",
+                            "baseline_auc": baseline_auc,
+                            "trained_auc": trained_auc,
+                        },
+                    )
+
                 # Export robustness delta as an OTel metric
-                robustness_delta = comparison.get("robustness_delta")
-                if robustness_delta is not None:
+                robustness_delta_val = comparison.get("robustness_delta")
+                if robustness_delta_val is not None:
                     record_metric(
                         "robustness_score",
-                        float(robustness_delta),
+                        float(robustness_delta_val),
                         {"model": self.config.get("model", {}).get("name", "unknown")},
                     )
+
+                # ── Automated HuggingFace Hub Push Gating ──────────────────
+                tracking_cfg = self.config.get("tracking", {})
+                auto_push_repo = tracking_cfg.get("auto_push_hub")
+                if auto_push_repo:
+                    import os
+                    import tempfile
+
+                    import yaml
+
+                    from nightmarenet.hub.core import push_model
+
+                    logger.info("Pushing to Hub...")
+                    try:
+                        with tempfile.TemporaryDirectory() as tmp_dir:
+                            self.export(tmp_dir)
+
+                            # Extract metadata from comparison results and configuration
+                            pipeline_metadata = {
+                                "robustness_score": float(
+                                    robustness_delta if robustness_delta is not None else 0.0
+                                ),
+                                "training_config": self.config,
+                            }
+
+                            # Save the metadata temporarily inside the exported directory
+                            metadata_file_path = os.path.join(tmp_dir, "hub_metadata.yaml")
+                            with open(metadata_file_path, "w", encoding="utf-8") as f:
+                                yaml.safe_dump(pipeline_metadata, f)
+
+                            # Pass the generated metadata file to push_model
+                            push_model(
+                                model_dir=tmp_dir,
+                                repo_id=auto_push_repo,
+                                metadata_path=metadata_file_path,
+                            )
+                    except Exception as upload_err:
+                        logger.error("Push failed: %s", upload_err)
 
                 return comparison
             except Exception as exc:
@@ -682,6 +1025,7 @@ class Pipeline:
             hf_dataset=hf_dataset,
             hf_subset=hf_subset,
         )
+
         self.optimize()
         self.prepare()
         self.train()
