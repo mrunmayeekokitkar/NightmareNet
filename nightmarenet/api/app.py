@@ -125,7 +125,7 @@ app.add_middleware(APIKeyMiddleware)  # type: ignore[arg-type]
 # --- CORS ---
 _cors_origins = [
     o.strip()
-    for o in os.environ.get("NIGHTMARENET_CORS_ORIGINS", "*").split(",")
+    for o in os.environ.get("NIGHTMARENET_CORS_ORIGINS", "").split(",")
     if o.strip()
 ]
 if not _cors_origins:
