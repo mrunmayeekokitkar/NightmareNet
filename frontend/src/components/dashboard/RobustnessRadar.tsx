@@ -28,7 +28,7 @@ const SERIES: RadarSeries[] = [
 
 export function RobustnessRadar() {
   const { isLive } = useDemoMode();
-  const hasEvaluationData = SERIES.length > 0;
+  const hasEvaluationData = SERIES.length >= 2;
   const size = 280;
   const cx = size / 2;
   const cy = size / 2;
