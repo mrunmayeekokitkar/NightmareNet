@@ -49,5 +49,5 @@ clean:
 
 .PHONY: dev
 dev: ## Start API and frontend dev servers in parallel with hot-reload (Ctrl+C to stop)
-		@chmod +x scripts/dev.sh
-		@./scripts/dev.sh
+	@chmod +x scripts/dev.sh
+	@./scripts/dev.sh
