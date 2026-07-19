@@ -64,7 +64,7 @@ class TrainPhase(Phase):
                     nightmare_base_dataset=context.nightmare_base_dataset,
                 )
                 # Log training lineage for compliance reporting
-                if history:
+                if history and context.tracker is not None:
                     for record in history:
                         context.tracker.log_phase(
                             cycle=record.get("cycle", 0),

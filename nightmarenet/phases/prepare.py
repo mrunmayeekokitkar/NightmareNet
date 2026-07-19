@@ -98,6 +98,7 @@ class PreparePhase(Phase):
                         resume_dir=context.resume_dir,
                         callback_manager=context.callback_manager,
                     )
+                    assert context.trainer is not None
                     if self.on_training_event is not None:
                         context.callback_manager.on_all(self.on_training_event)
                     context.trainer.run_id = context.run_id
@@ -118,13 +119,16 @@ class PreparePhase(Phase):
                         resume_dir=context.resume_dir,
                         callback_manager=context.callback_manager,
                     )
+                    assert context.trainer is not None
                     if self.on_training_event is not None:
                         context.callback_manager.on_all(self.on_training_event)
                     context.trainer.run_id = context.run_id
 
                 # Snapshot baseline model weights for later evaluation. Gradient
                 # generation uses autograd.grad and does not mutate model params.
-                context.baseline_model = copy.deepcopy(context.trainer.model)
+                trainer = context.trainer
+                assert trainer is not None
+                context.baseline_model = copy.deepcopy(trainer.model)
                 context.baseline_model.eval()
 
                 text_column = context.config.get("dataset", {}).get("text_column", "text")
@@ -132,20 +136,20 @@ class PreparePhase(Phase):
                 batch_size = context.config.get("training", {}).get("batch_size", 8)
 
                 context.train_dl = _tokenize_dataset(
-                    wake_data, context.trainer.tokenizer, text_column, max_length, batch_size
+                    wake_data, trainer.tokenizer, text_column, max_length, batch_size
                 )
                 context.eval_dl = _tokenize_dataset(
                     context.eval_dataset,
-                    context.trainer.tokenizer,
+                    trainer.tokenizer,
                     text_column,
                     max_length,
                     batch_size,
                 )
                 context.dream_dl = _tokenize_dataset(
-                    dream_data, context.trainer.tokenizer, text_column, max_length, batch_size
+                    dream_data, trainer.tokenizer, text_column, max_length, batch_size
                 )
                 context.nightmare_dl = _tokenize_dataset(
-                    nightmare_data, context.trainer.tokenizer, text_column, max_length, batch_size
+                    nightmare_data, trainer.tokenizer, text_column, max_length, batch_size
                 )
                 logger.info("Preparation complete: dataloaders ready.")
             except (ValueError, RuntimeError, OSError) as exc:
