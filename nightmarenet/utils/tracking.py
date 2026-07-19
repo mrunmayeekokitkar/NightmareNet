@@ -36,8 +36,8 @@ class ExperimentTracker:
         self.project = project
         self.run_name = run_name
         self._step = 0
-        self._writer = None
-        self._run = None
+        self._writer: Any = None
+        self._run: Any = None
 
         self.run_id = str(uuid.uuid4())
 
@@ -209,7 +209,9 @@ class ExperimentTracker:
                 import mlflow
 
                 if os.path.isdir(path):
-                    mlflow.log_artifacts(path)
+                    # Preserve the directory name to prevent root-level overwrites
+                    artifact_path = os.path.basename(os.path.normpath(path)) or None
+                    mlflow.log_artifacts(path, artifact_path=artifact_path)
                 elif os.path.exists(path):
                     mlflow.log_artifact(path)
                 else:
