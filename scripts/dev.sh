@@ -1,5 +1,5 @@
 #!/bin/bash
-
+trap "kill 0 2>/dev/null || true" EXIT
 # Enable strict error tracking (Bot requirement)
 set -o pipefail
 
@@ -25,12 +25,12 @@ trap cleanup SIGINT SIGTERM
 
 # --- Boot API (FastAPI) ---
 echo -e "${BLUE}[API] Starting Uvicorn development server...${NC}"
-uvicorn nightmarenet.api.app:app --reload --host 127.0.0.1 --port 8000 2>&1 | sed -e "s/^/${BLUE}[API]${NC} /" &
+uvicorn nightmarenet.api.app:app --reload --host 127.0.0.1 --port 8000 2>&1 > >(sed -e "s/^/${BLUE}[API]${NC} /") &
 API_PID=$!
 
 # --- Boot Frontend (Next.js) ---
 echo -e "${YELLOW}[Frontend] Starting Next.js development server...${NC}"
-cd frontend && npm run dev 2>&1 | sed -e "s/^/${YELLOW}[Frontend]${NC} /" &
+cd frontend && npm run dev 2>&1 > >(sed -e "s/^/${YELLOW}[Frontend]${NC} /") &
 FE_PID=$!
 
 # Wait for any process to crash/exit (Bot requirement)
