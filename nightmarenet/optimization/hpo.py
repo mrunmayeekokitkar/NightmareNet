@@ -99,6 +99,7 @@ class HyperparameterOptimizer:
 
         # Pruning coordination
         pruned_flag = [False]
+        pipeline = None
 
         def on_event(metrics: dict) -> None:
             if not self.pruning_enabled:
@@ -132,7 +133,7 @@ class HyperparameterOptimizer:
 
         metric_val = comparison.get("robustness_delta")
         if metric_val is None:
-            for fallback in ("robustness", "avg_robustness"):
+            for fallback in ("robustness", "avg_robustness", "mean_robustness"):
                 if fallback in comparison:
                     metric_val = comparison[fallback]
                     break
