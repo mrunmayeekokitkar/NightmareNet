@@ -46,9 +46,11 @@ vi.mock("@/lib/sounds", () => ({
 }));
 
 // Use vi.hoisted so these are defined before vi.mock is hoisted above them
-const { pushMock, testWebhookMock } = vi.hoisted(() => ({
+const { pushMock, testWebhookMock, getWebhooksMock, saveWebhooksMock } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     testWebhookMock: vi.fn(),
+    getWebhooksMock: vi.fn().mockResolvedValue({ webhooks: [] }),
+    saveWebhooksMock: vi.fn().mockResolvedValue({ webhooks: [] }),
 }));
 
 // Mock useToast hook
@@ -56,9 +58,11 @@ vi.mock("@/components/ui/Toast", () => ({
     useToast: () => ({ push: pushMock }),
 }));
 
-// Mock the webhook API call — we don't want real network requests in tests
+// Mock the webhook API calls
 vi.mock("@/lib/api", () => ({
     testWebhook: (...args: unknown[]) => testWebhookMock(...args),
+    getWebhooks: (...args: unknown[]) => getWebhooksMock(...args),
+    saveWebhooks: (...args: unknown[]) => saveWebhooksMock(...args),
 }));
 
 import { SettingsPanel } from "@/components/dashboard/SettingsPanel";
