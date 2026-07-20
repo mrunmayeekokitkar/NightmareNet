@@ -57,10 +57,12 @@ _MODEL_TYPE_MAP = {
     "seq_classification": AutoModelForSequenceClassification,
 }
 
+
 @dataclass
 class ModelOutput:
     loss: Optional[torch.Tensor]
     logits: torch.Tensor
+
 
 class VisionModelWrapper(torch.nn.Module):
     def __init__(self, base_model, criterion=None):
@@ -202,15 +204,14 @@ class Trainer:
             )
             if self.model_type == "image_classification":
                 import torchvision.models as torchvision_models
+
                 model_creator = None
                 for name in dir(torchvision_models):
                     if name.lower() == model_name.lower():
                         model_creator = getattr(torchvision_models, name)
                         break
                 if model_creator is None:
-                    raise ValueError(
-                        f"Unknown torchvision model name '{model_name}'."
-                    )
+                    raise ValueError(f"Unknown torchvision model name '{model_name}'.")
                 num_classes = self.model_config.get("num_labels", 10)
                 try:
                     base_model = model_creator(num_classes=num_classes)

@@ -94,6 +94,10 @@ ai = [
 hub = [
     "huggingface_hub>=0.20.0"
 ]
+export = [
+    "onnx>=1.14.0",
+    "onnxruntime>=1.16.0"
+]
 
 [project.urls]
 Homepage = "https://github.com/Adit-Jain-srm/NightmareNet"

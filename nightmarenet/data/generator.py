@@ -496,6 +496,7 @@ class DistortedVisionDataset(torch.utils.data.Dataset):
         labels = item["labels"]
 
         from nightmarenet.distortions.registry import get_vision_registry
+
         registry = get_vision_registry()
 
         # Retrieve engines matching the current phase
@@ -504,6 +505,7 @@ class DistortedVisionDataset(torch.utils.data.Dataset):
         if vision_config:
             for name, prob in vision_config.items():
                 import random
+
                 meta = registry.get_engine_metadata(name)
                 if meta.get("phase") == self.phase and random.random() < prob:
                     engines.append(name)

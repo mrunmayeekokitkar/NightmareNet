@@ -254,9 +254,11 @@ def load_from_config(config: dict) -> Any:
         name = dataset_config.get("name", "cifar10").lower()
         max_samples = dataset_config.get("max_samples")
 
-        transform = transforms.Compose([
-            transforms.ToTensor(),
-        ])
+        transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+            ]
+        )
 
         if "cifar10" in name:
             try:
@@ -284,9 +286,7 @@ def load_from_config(config: dict) -> Any:
                     root=os.path.join(path, "val"), transform=transform
                 )
             else:
-                logger.warning(
-                    "ImageNet subset path %s not found. Falling back to FakeData.", path
-                )
+                logger.warning("ImageNet subset path %s not found. Falling back to FakeData.", path)
                 train_dataset = datasets.FakeData(
                     size=100, image_size=(3, 224, 224), num_classes=1000, transform=transform
                 )
@@ -314,8 +314,7 @@ def load_from_config(config: dict) -> Any:
     dataset_config = config.get("dataset", {})
     return DatasetWrapper(
         dataset_name=dataset_config.get("name", "wikitext"),
-        subset=dataset_config.get("config")
-            or dataset_config.get("subset", "wikitext-2-raw-v1"),
+        subset=dataset_config.get("config") or dataset_config.get("subset", "wikitext-2-raw-v1"),
         text_column=dataset_config.get("text_column", "text"),
         max_samples=dataset_config.get("max_samples"),
         seed=config.get("seed", 42),
@@ -327,6 +326,7 @@ class VisionItemWrapper(torch.utils.data.Dataset):
     def __init__(self, dataset):
         self.dataset = dataset
         from torchvision.transforms.functional import to_tensor
+
         self._to_tensor = to_tensor
 
     def __len__(self):

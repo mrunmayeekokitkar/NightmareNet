@@ -50,6 +50,7 @@ def _find_closest_key(key: str, candidates: list[str], max_distance: int = 2) ->
 
     return closest if min_dist <= max_distance else None
 
+
 # Default configuration with all supported keys and their default values.
 DEFAULT_CONFIG: dict[str, Any] = {
     "model": {

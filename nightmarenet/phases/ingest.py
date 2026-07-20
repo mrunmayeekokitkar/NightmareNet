@@ -63,6 +63,7 @@ class IngestPhase(Phase):
                 model_type = context.config.get("model", {}).get("type", "")
                 if model_type == "image_classification":
                     from nightmarenet.data.loader import load_from_config
+
                     wrapper = load_from_config(context.config)
                     context.dataset = wrapper.train_data
                     context.eval_dataset = wrapper.test_data

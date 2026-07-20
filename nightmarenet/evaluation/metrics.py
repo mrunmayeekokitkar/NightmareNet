@@ -101,6 +101,7 @@ def quick_robustness_score(
                     self.target_model = model
 
             from nightmarenet.data.generator import DistortedVisionDataset
+
             dummy_gen = DummyGenerator(strength, seed=42, config={})
             distorted_ds = DistortedVisionDataset(subset, dummy_gen, phase="dream")
             dataloader = DataLoader(distorted_ds, batch_size=batch_size, shuffle=False)
@@ -351,6 +352,7 @@ def robustness_score(
     if is_vision:
         accuracies = []
         for strength in strengths:
+
             class DummyGenerator:
                 def __init__(self, strength, seed, config):
                     self.strength = strength
@@ -359,6 +361,7 @@ def robustness_score(
                     self.target_model = model
 
             from nightmarenet.data.generator import DistortedVisionDataset
+
             dummy_gen = DummyGenerator(strength, seed=42, config={})
             distorted_ds = DistortedVisionDataset(base_dataset, dummy_gen, phase="dream")
             dataloader = DataLoader(distorted_ds, batch_size=batch_size, shuffle=False)

@@ -34,8 +34,7 @@ class PixelPerturbation(ImageDistortion):
         # Generate uniform random noise in [-eps, eps]
         if gen is not None:
             noise = (
-                torch.rand(image.shape, generator=gen, device=image.device, dtype=image.dtype)
-                * 2.0
+                torch.rand(image.shape, generator=gen, device=image.device, dtype=image.dtype) * 2.0
                 - 1.0
             ) * eps
         else:
