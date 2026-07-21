@@ -67,7 +67,7 @@ class HyperparameterOptimizer:
             load_if_exists=True,
         )
 
-    def _suggest_parameters(self, trial: "optuna.Trial") -> dict:
+    def _suggest_parameters(self, trial: optuna.Trial) -> dict:
         """Parse search space from config and suggest parameters."""
         trial_params = {}
         for param_key, param_def in self.search_space.items():
@@ -92,7 +92,7 @@ class HyperparameterOptimizer:
                 logger.warning("Unknown parameter type '%s' for %s", param_type, param_key)
         return trial_params
 
-    def _objective(self, trial: "optuna.Trial") -> float:
+    def _objective(self, trial: optuna.Trial) -> float:
         """Optuna objective function."""
         suggested_params = self._suggest_parameters(trial)
 
