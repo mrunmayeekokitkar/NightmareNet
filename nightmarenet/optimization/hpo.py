@@ -15,6 +15,7 @@ try:
 
     OPTUNA_AVAILABLE = True
 except ImportError:
+    optuna = None  # type: ignore[assignment]
     OPTUNA_AVAILABLE = False
 
 
