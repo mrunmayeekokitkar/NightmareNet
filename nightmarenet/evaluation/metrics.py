@@ -89,28 +89,38 @@ def compute_perplexity(
             for batch in tqdm(dataloader, desc="Computing perplexity"):
                 batch = {k: v.to(device) for k, v in batch.items()}
 
+                if "attention_mask" in batch:
+                    mask = batch["attention_mask"]
+                else:
+                    mask = torch.ones_like(batch["input_ids"])
+
+                labels = batch["input_ids"].clone()
+                labels[mask == 0] = -100
+
+                outputs = model(**batch, labels=labels)
+                logits = outputs.logits
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
+                loss_fct = torch.nn.CrossEntropyLoss(reduction="none", ignore_index=-100)
+                loss = loss_fct(
+                    shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
+                )
+                loss = loss.view(shift_labels.size(0), -1)
+
+                shift_mask = mask[..., 1:].contiguous()
+                valid_tokens_per_sample = shift_mask.sum(dim=1)
+                per_sample_loss = (loss * shift_mask).sum(dim=1) / torch.clamp(
+                    valid_tokens_per_sample, min=1
+                )
+
                 if return_per_sample:
-                    outputs = model(**batch, labels=batch.get("input_ids"))
-                    logits = outputs.logits
-                    shift_logits = logits[..., :-1, :].contiguous()
-                    shift_labels = batch.get("input_ids")[..., 1:].contiguous()
-                    loss_fct = torch.nn.CrossEntropyLoss(reduction="none")
-                    loss = loss_fct(
-                        shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
-                    )
-                    loss = loss.view(shift_labels.size(0), -1)
-                    per_sample_loss = loss.mean(dim=1)
                     batch_ppls = (
                         torch.exp(torch.clamp(per_sample_loss, max=100)).cpu().numpy().tolist()
                     )
                     per_sample_ppls.extend(batch_ppls)
 
-                    total_loss += outputs.loss.item() * batch["input_ids"].numel()
-                    total_tokens += batch["input_ids"].numel()
-                else:
-                    outputs = model(**batch, labels=batch.get("input_ids"))
-                    total_loss += outputs.loss.item() * batch["input_ids"].numel()
-                    total_tokens += batch["input_ids"].numel()
+                total_loss += (per_sample_loss * valid_tokens_per_sample).sum().item()
+                total_tokens += valid_tokens_per_sample.sum().item()
     except Exception as e:
         logger.warning("Error during perplexity computation: %s", e)
         return float("inf")
@@ -433,27 +443,9 @@ def robustness_score(
         clean_dl = DataLoader(clean_ds, batch_size=batch_size, shuffle=False)
         clean_metrics = classification_metrics(model, clean_dl, device, return_per_sample=True)
         baseline_confs = clean_metrics.get("per_sample_confs", [])
+        orig_preds = clean_metrics.get("per_sample_preds", [])
+        orig_confs = clean_metrics.get("per_sample_confs", [])
         failures_data = []
-        orig_preds = []
-        orig_confs = []
-
-        if export_failures:
-
-            class DummyGenerator0:
-                def __init__(self, strength, seed, config):
-                    self.strength = strength
-                    self.seed = seed
-                    self.config = config
-                    self.target_model = model
-
-            from nightmarenet.data.generator import DistortedVisionDataset
-
-            dummy_gen_0 = DummyGenerator0(0.0, seed=42, config={})
-            clean_ds = DistortedVisionDataset(base_dataset, dummy_gen_0, phase="dream")
-            clean_dl = DataLoader(clean_ds, batch_size=batch_size, shuffle=False)
-            clean_metrics = classification_metrics(model, clean_dl, device, return_per_sample=True)
-            orig_preds = clean_metrics.get("per_sample_preds", [])
-            orig_confs = clean_metrics.get("per_sample_confs", [])
 
         for strength in strengths:
 
@@ -471,9 +463,6 @@ def robustness_score(
             dataloader = DataLoader(distorted_ds, batch_size=batch_size, shuffle=False)
 
             metrics = classification_metrics(model, dataloader, device, return_per_sample=True)
-            metrics = classification_metrics(
-                model, dataloader, device, return_per_sample=export_failures
-            )
             acc = metrics.get("accuracy", 0.0)
             accuracies.append(acc)
 
