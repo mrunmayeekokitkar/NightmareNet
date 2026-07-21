@@ -86,7 +86,7 @@ class HyperparameterOptimizer:
             elif param_type == "categorical":
                 trial_params[param_key] = trial.suggest_categorical(param_key, param_def["choices"])
             else:
-                logger.warning(f"Unknown parameter type '{param_type}' for {param_key}")
+                logger.warning("Unknown parameter type '%s' for %s", param_type, param_key)
         return trial_params
 
     def _objective(self, trial: "optuna.Trial") -> float:
@@ -146,16 +146,16 @@ class HyperparameterOptimizer:
 
     def optimize(self) -> optuna.Study:
         """Run the optimization study."""
-        logger.info(f"Starting optimization for {self.n_trials} trials.")
+        logger.info("Starting optimization for %d trials.", self.n_trials)
         self.study.optimize(self._objective, n_trials=self.n_trials)
 
         try:
             best_trial = self.study.best_trial
-            logger.info(f"Optimization finished. Best trial: {best_trial.number}")
-            logger.info(f"  Value: {best_trial.value}")
-            logger.info("  Params: ")
+            logger.info("Optimization finished. Best trial: %d", best_trial.number)
+            logger.info("  Value: %s", best_trial.value)
+            logger.info("  Params:")
             for k, v in best_trial.params.items():
-                logger.info(f"    {k}: {v}")
+                logger.info("    %s: %s", k, v)
         except ValueError:
             logger.info("Optimization finished but no completed trials were found.")
 

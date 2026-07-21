@@ -949,6 +949,7 @@ def main(argv: Optional[list] = None) -> int:
         "push": cmd_push,
         "pull": cmd_pull,
         "export": cmd_export,
+        "optimize": cmd_optimize,
     }
 
     return commands[args.command](args)
