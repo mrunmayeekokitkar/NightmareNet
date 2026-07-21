@@ -12,17 +12,13 @@ from __future__ import annotations
 
 import time
 
-from hypothesis import HealthCheck, given, settings
 import hypothesis.strategies as st
 import pytest
+from hypothesis import HealthCheck, given, settings
 
-from nightmarenet.distortions.dsl.parser import (
-    format_dsl_expression,
-    parse_dsl_expression,
-)
+from nightmarenet.distortions.dsl.parser import format_dsl_expression, parse_dsl_expression
 from nightmarenet.distortions.dsl.schema import ChainStep
 from nightmarenet.exceptions import DSLSyntaxError, NightmareNetError
-
 
 # Strategy for generating valid engine names
 engine_name_st = st.from_regex(r"^[a-zA-Z][a-zA-Z0-9_]{0,14}$", fullmatch=True)
