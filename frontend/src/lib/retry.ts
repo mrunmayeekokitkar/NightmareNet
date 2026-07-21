@@ -93,49 +93,35 @@ export async function withRetry(
       const response = await fn();
 
       // Surface non-OK responses as typed errors so callers can branch on status.
-      if (!response.ok) {
-        if (NON_RETRYABLE_STATUS_CODES.has(response.status)) {
-          // Client error — fail immediately, no retry.
-          const body = await response.json().catch(() => ({})) as Record<string, string>;
-          throw new ApiError(
-            body.detail || body.error || `API error ${response.status}`,
-            response.status,
-            response,
-          );
-        }
+    if (!response.ok) {
+  const cloned = response.clone();
+  const body = await cloned.json().catch(() => ({})) as Record<string, string>;
+  const message = body.detail || body.error || `API error ${response.status}`;
 
-        if (RETRYABLE_STATUS_CODES.has(response.status)) {
-          // Treat retryable HTTP errors the same as network errors below.
-          const body = await response.json().catch(() => ({})) as Record<string, string>;
-          lastError = new ApiError(
-            body.detail || body.error || `API error ${response.status}`,
-            response.status,
-            response,
-          );
+  if (NON_RETRYABLE_STATUS_CODES.has(response.status)) {
+    throw new ApiError(message, response.status, response);
+  }
 
-          if (attempt < maxRetries) {
-            // Honour Retry-After for rate-limit responses.
-            const delay =
-              response.status === 429
-                ? (retryAfterMs(response) ?? baseDelayMs * 2 ** attempt)
-                : baseDelayMs * 2 ** attempt;
+  if (RETRYABLE_STATUS_CODES.has(response.status)) {
+    lastError = new ApiError(message, response.status, response);
 
-            onRetry?.(attempt + 1, delay);
-            await sleep(delay);
-            continue;
-          }
+    if (attempt < maxRetries) {
+      const delay =
+        response.status === 429
+          ? (retryAfterMs(response) ?? baseDelayMs * 2 ** attempt)
+          : baseDelayMs * 2 ** attempt;
 
-          throw lastError;
-        }
+      onRetry?.(attempt + 1, delay);
+      await sleep(delay);
+      continue;
+    }
 
-        // Unexpected non-OK status — propagate immediately.
-        const body = await response.json().catch(() => ({})) as Record<string, string>;
-        throw new ApiError(
-          body.detail || body.error || `API error ${response.status}`,
-          response.status,
-          response,
-        );
-      }
+    throw lastError;
+  }
+
+  // Unexpected non-OK status — propagate immediately.
+  throw new ApiError(message, response.status, response);
+}
 
       return response;
     } catch (error) {
