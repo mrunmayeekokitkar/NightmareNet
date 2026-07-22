@@ -7,6 +7,8 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type Dispatch,
+  type SetStateAction,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Panel } from "./Panel";
@@ -18,6 +20,8 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { deleteExperiment, exportExperiment, createPipeline, type PipelineCreateRequest } from "@/lib/api";
 import {
   IconBeaker,
   IconDownload,
@@ -25,6 +29,7 @@ import {
   IconKebab,
   IconPlus,
   IconSearch,
+  IconSpinner,
 } from "./icons";
 
 interface Experiment {
@@ -36,6 +41,7 @@ interface Experiment {
   robustness: number;
   duration: string;
   createdAt: string;
+  config?: PipelineCreateRequest;
 }
 
 const SAMPLE: Experiment[] = [
@@ -67,6 +73,11 @@ interface ToastApi {
 interface RowActionsMenuProps {
   row: Experiment;
   toast: ToastApi;
+  loadingActions: Set<string>;
+  setLoadingActions: React.Dispatch<React.SetStateAction<Set<string>>>;
+  experimentToDelete: string | null;
+  setExperimentToDelete: React.Dispatch<React.SetStateAction<string | null>>;
+  setDeleteConfirmOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 interface MenuItemDef {
@@ -84,7 +95,15 @@ interface MenuItemDef {
  * outside click. The trigger acts as a stable anchor so the popover can
  * absolutely-position relative to the cell without measuring DOM.
  */
-function RowActionsMenu({ row, toast }: RowActionsMenuProps) {
+function RowActionsMenu({
+  row,
+  toast,
+  loadingActions,
+  setLoadingActions,
+  experimentToDelete,
+  setExperimentToDelete,
+  setDeleteConfirmOpen,
+}: RowActionsMenuProps) {
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -116,36 +135,82 @@ function RowActionsMenu({ row, toast }: RowActionsMenuProps) {
         label: "Compare to baseline",
         ariaLabel: `Compare ${row.name} to baseline`,
         onSelect: () => {
-          toast.push({
-            title: "Comparing to baseline",
-            description: `${row.name} vs hardened baseline (Δ robustness pending).`,
-            variant: "info",
-          });
-          console.log("[ExperimentList] compare-to-baseline", row.id);
+          window.location.href = `/compare?ids=${row.id}`;
         },
       },
       {
         label: "Re-run with strength × 1.2",
         ariaLabel: `Re-run ${row.name} with strength × 1.2`,
-        onSelect: () => {
-          toast.push({
-            title: "Re-run queued",
-            description: `${row.name} will run at 1.2× the original strength.`,
-            variant: "success",
-          });
-          console.log("[ExperimentList] rerun-x1.2", row.id);
+        onSelect: async () => {
+          setLoadingActions((prev) => new Set(prev).add(row.id));
+          try {
+            const baseConfig = row.config || {
+              source_type: "text" as const,
+              text_content: "",
+              model_name: row.model,
+              model_type: "causal_lm" as const,
+              num_cycles: row.cycles,
+              dream_strength: 0.25,
+              nightmare_strength: 0.8,
+            };
+            const config = {
+              ...baseConfig,
+              dream_strength: (baseConfig.dream_strength ?? 0.25) * 1.2,
+              nightmare_strength: (baseConfig.nightmare_strength ?? 0.8) * 1.2,
+            };
+            await createPipeline(config);
+            toast.push({
+              title: "Re-run queued",
+              description: `${row.name} will run at 1.2× the original strength.`,
+              variant: "success",
+            });
+          } catch (error) {
+            toast.push({
+              title: "Re-run failed",
+              description: error instanceof Error ? error.message : "Failed to queue re-run",
+              variant: "error",
+            });
+          } finally {
+            setLoadingActions((prev) => {
+              const next = new Set(prev);
+              next.delete(row.id);
+              return next;
+            });
+          }
         },
       },
       {
-        label: "Export run report (JSON)",
-        ariaLabel: `Export ${row.name} run report as JSON`,
-        onSelect: () => {
-          toast.push({
-            title: "Export prepared",
-            description: `Generating ${row.id}.json — check downloads in a moment.`,
-            variant: "info",
-          });
-          console.log("[ExperimentList] export-json", row.id);
+        label: "Export run report (CSV)",
+        ariaLabel: `Export ${row.name} run report as CSV`,
+        onSelect: async () => {
+          setLoadingActions((prev) => new Set(prev).add(row.id));
+          try {
+            const response = await exportExperiment(row.id, "csv");
+            const blob = new Blob([response.data], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${row.id}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.push({
+              title: "Export prepared",
+              description: `${row.id}.csv downloaded successfully.`,
+              variant: "info",
+            });
+          } catch (error) {
+            toast.push({
+              title: "Export failed",
+              description: error instanceof Error ? error.message : "Failed to export experiment",
+              variant: "error",
+            });
+          } finally {
+            setLoadingActions((prev) => {
+              const next = new Set(prev);
+              next.delete(row.id);
+              return next;
+            });
+          }
         },
       },
       {
@@ -157,7 +222,6 @@ function RowActionsMenu({ row, toast }: RowActionsMenuProps) {
             description: "Run-detail deep links land in the next sprint.",
             variant: "warning",
           });
-          console.log("[ExperimentList] open-new-tab", row.id);
         },
       },
       {
@@ -165,16 +229,12 @@ function RowActionsMenu({ row, toast }: RowActionsMenuProps) {
         ariaLabel: `Delete ${row.name}`,
         variant: "danger",
         onSelect: () => {
-          toast.push({
-            title: "Delete requires confirmation",
-            description: `${row.name} stays for now — confirmation flow ships next.`,
-            variant: "warning",
-          });
-          console.log("[ExperimentList] delete-requested", row.id);
+          setExperimentToDelete(row.id);
+          setDeleteConfirmOpen(true);
         },
       },
     ],
-    [row, toast]
+    [row, toast, setLoadingActions, setExperimentToDelete, setDeleteConfirmOpen]
   );
 
   return (
@@ -270,6 +330,40 @@ export function ExperimentList({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | Experiment["status"]>("all");
   const toast = useToast();
+  const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
+  const [experimentToDelete, setExperimentToDelete] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!experimentToDelete) return;
+
+    setLoadingActions((prev) => new Set(prev).add(experimentToDelete));
+
+    try {
+      await deleteExperiment(experimentToDelete);
+      toast.push({
+        title: "Experiment deleted",
+        description: "The experiment has been successfully removed.",
+        variant: "success",
+      });
+      // Note: List refresh requires architectural changes (experiments passed as props)
+      // Consider passing a refresh callback or moving to local state management
+    } catch (error) {
+      toast.push({
+        title: "Delete failed",
+        description: error instanceof Error ? error.message : "Failed to delete experiment",
+        variant: "error",
+      });
+    } finally {
+      setLoadingActions((prev) => {
+        const next = new Set(prev);
+        next.delete(experimentToDelete);
+        return next;
+      });
+      setDeleteConfirmOpen(false);
+      setExperimentToDelete(null);
+    }
+  }, [experimentToDelete, toast]);
 
   // `experiments` defaults to the demo sample — callers can pass `[]` to
   // exercise the empty state, or a real dataset once the runs API is wired.
@@ -388,12 +482,23 @@ export function ExperimentList({
       accessor: () => "",
       align: "right",
       width: "44px",
-      cell: (r): ReactNode => <RowActionsMenu row={r} toast={toast} />,
+      cell: (r): ReactNode => (
+        <RowActionsMenu
+          row={r}
+          toast={toast}
+          loadingActions={loadingActions}
+          setLoadingActions={setLoadingActions}
+          experimentToDelete={experimentToDelete}
+          setExperimentToDelete={setExperimentToDelete}
+          setDeleteConfirmOpen={setDeleteConfirmOpen}
+        />
+      ),
     },
   ];
 
   return (
-    <Panel
+    <>
+      <Panel
       title="Experiments"
       subtitle={`${rows.length} of ${source.length} runs`}
       icon={<IconBeaker size={14} />}
@@ -465,7 +570,19 @@ export function ExperimentList({
       ) : (
         <ExperimentTable columns={columns} rows={rows} />
       )}
-    </Panel>
+      </Panel>
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        title="Delete experiment"
+        subtitle="This action cannot be undone. The experiment and all associated data will be permanently removed."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        isLoading={loadingActions.has(experimentToDelete || "")}
+      />
+    </>
   );
 }
 
