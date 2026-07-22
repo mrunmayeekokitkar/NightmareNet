@@ -273,3 +273,8 @@ export function IconSpinner({ className }: { className?: string }) {
     </svg>
   );
 }
+export const IconMenu = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 6h16M4 12h16M4 18h16" />
+  </svg>
+);
