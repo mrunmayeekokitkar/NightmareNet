@@ -14,15 +14,17 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from nightmarenet.exceptions import PipelinePhaseError
-from nightmarenet.pipeline import Pipeline
+
+if TYPE_CHECKING:
+    from nightmarenet.pipeline import Pipeline
 
 try:
     from opentelemetry import context as otel_context
 except ImportError:
-    otel_context = None
+    otel_context = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +90,7 @@ class PipelineRunner:
 
         # Persist initial run state
         _persist_run_state(self.id, self.pipeline.config, "running", self._start_time)
-        parent_context = (
-            otel_context.get_current() if otel_context is not None else None
-        )
+        parent_context = otel_context.get_current() if otel_context is not None else None
 
         def _run() -> None:
             token = None
@@ -165,9 +165,7 @@ class PipelineRunner:
                 if token is not None:
                     otel_context.detach(token)
 
-        self._thread = threading.Thread(
-            target=_run, daemon=True, name=f"pipeline-{self.id}"
-        )
+        self._thread = threading.Thread(target=_run, daemon=True, name=f"pipeline-{self.id}")
         self._thread.start()
         logger.info("Pipeline %s started.", self.id)
         return self.id
@@ -308,9 +306,7 @@ def _get_runs_dir() -> Path:
     return runs_dir
 
 
-def _persist_run_state(
-    run_id: str, config: dict, status: str, timestamp: float
-) -> None:
+def _persist_run_state(run_id: str, config: dict, status: str, timestamp: float) -> None:
     """Persist initial run state to disk."""
     runs_dir = _get_runs_dir()
     run_file = runs_dir / f"{run_id}.json"

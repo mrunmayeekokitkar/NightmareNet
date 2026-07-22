@@ -27,9 +27,10 @@ Thank you for helping improve NightmareNet. This project uses a **research-first
 7. [Adding a new distortion](#adding-a-new-distortion)
 8. [Coding standards](#coding-standards)
 9. [Documentation](#documentation)
-10. [PR checklist](#pr-checklist)
-11. [ECSoC'26 Contributors](#ecsoc26-contributors)
-12. [Where to ask for help](#where-to-ask-for-help)
+10. [API Versioning Policy](#api-versioning-policy)
+11. [PR checklist](#pr-checklist)
+12. [ECSoC'26 Contributors](#ecsoc26-contributors)
+13. [Where to ask for help](#where-to-ask-for-help)
 
 ---
 
@@ -392,6 +393,85 @@ Good documentation is as important as good code. If you're unsure what to update
 
 ---
 
+## API Versioning Policy
+
+NightmareNet follows [Semantic Versioning 2.0.0](https://semver.org/) for its API. The current API version is attached to every response via the `X-API-Version` header.
+
+### When to Update the API Changelog
+
+Contributors **must** update [docs/api-changelog.md](docs/api-changelog.md) whenever a Pull Request introduces any changes to the API endpoints, schemas, authentication, or query parameters.
+
+### Classification of Changes
+
+Changes are classified into three main types:
+
+1. **Breaking Changes (Major)**
+   - Renaming or deleting existing endpoints.
+   - Removing fields from request bodies or response objects.
+   - Changing the data type of existing fields.
+   - Making previously optional fields mandatory.
+   - Tightening rate limits significantly.
+   - Action required: Increment major version (e.g., `0.2.0` -> `1.0.0`), document migration steps, and mark Change Type as `Breaking` in the changelog.
+
+2. **Non-breaking Changes (Minor / Patch)**
+   - Adding new endpoints.
+   - Adding optional fields to request bodies or new fields to response objects.
+   - Non-breaking bug fixes or performance improvements.
+   - Action required: Increment minor/patch version (e.g., `0.2.0` -> `0.2.1`), and mark Change Type as `Added` or `Fixed` in the changelog.
+
+3. **Deprecated / Removed Changes**
+   - Marking an endpoint as deprecated in the OpenAPI docs/schemas before its removal.
+   - Removing deprecated endpoints (Breaking).
+
+### Required Contributor Changelog Template
+
+When submitting a PR that affects the API, contributors must append a new entry to `docs/api-changelog.md` using the template below:
+
+```markdown
+## [<API Version>] - <Release Date (YYYY-MM-DD)>
+
+### Change Type
+- <Breaking / Non-breaking / Deprecated / Added / Fixed / Removed>
+
+### Endpoint(s) Affected
+- `<HTTP Method> <Endpoint Path>` (e.g., `POST /api/v1/generate/dream`)
+
+### Description
+<Detailed description of what changed, why, and the technical impact.>
+
+### Migration Guide
+<Step-by-step instructions for clients to upgrade if the change is breaking. Write "None" if non-breaking.>
+
+### Notes
+<Any extra context, performance considerations, or caveats.>
+```
+
+### Example Entry
+
+```markdown
+## [0.2.0] - 2026-07-01
+
+### Change Type
+- Added
+
+### Endpoint(s) Affected
+- `GET /api/v1/health`
+- `POST /api/v1/generate/dream`
+- `POST /api/v1/generate/nightmare`
+- `POST /api/v1/evaluate/robustness`
+
+### Description
+Initial release of the NightmareNet FastAPI service. Supports generation of dream/nightmare text distortions and evaluation of model robustness.
+
+### Migration Guide
+None.
+
+### Notes
+Initial release.
+```
+
+---
+
 ## PR checklist
 
 > **Assignment is mandatory.** Do NOT open a PR for an issue you are not assigned to. Request assignment first (see [Issue Assignment Rules](#issue-assignment-rules)). Unassigned PRs will be closed without review.
@@ -505,7 +585,7 @@ These are applied by maintainers at merge time based on quality. **Do not reques
 
 ### Pro Tips (what separates great contributors from average ones)
 
-1. **Resolve CodeRabbitAI suggestions.** Our repo uses automated code review. When CodeRabbit leaves suggestions on your PR, address each one (fix it or explain why you disagree). Unresolved bot comments signal laziness to reviewers.
+1. **Resolve CodeRabbitAI suggestions.** Our repo uses automated code review. When CodeRabbit leaves suggestions on your PR, address each one (fix it or explain why you disagree). **Do NOT click "Resolve conversation" without actually fixing the code or replying with a reason.** Maintainers verify every resolved comment against the diff - silently resolving without a fix will be caught and delays your merge. If a suggestion conflicts with the intended design, reply in that thread explaining *why* rather than dismissing it.
 
 2. **Re-request review after addressing feedback.** After making changes requested by the code owner, click "Re-request review" on GitHub. Don't just push commits silently and wait - signal that you're ready for the next round.
 

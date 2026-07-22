@@ -125,9 +125,7 @@ def run_distillation(
                 with torch.no_grad():
                     teacher_out = teacher(**adv_batch)
                     teacher_logits = (
-                        teacher_out.logits
-                        if hasattr(teacher_out, "logits")
-                        else teacher_out
+                        teacher_out.logits if hasattr(teacher_out, "logits") else teacher_out
                     )
 
                 # Student logits
@@ -137,9 +135,7 @@ def run_distillation(
                 else:
                     student_out = student(**adv_batch, labels=batch.get("input_ids"))
                 student_logits = (
-                    student_out.logits
-                    if hasattr(student_out, "logits")
-                    else student_out
+                    student_out.logits if hasattr(student_out, "logits") else student_out
                 )
                 task_loss = student_out.loss
 

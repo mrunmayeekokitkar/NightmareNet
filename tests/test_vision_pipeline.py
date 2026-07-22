@@ -50,6 +50,7 @@ def test_full_vision_pipeline_cycle():
 
     # 1. Ingest (mock CIFAR-10 download to force fallback to FakeData immediately)
     from unittest.mock import patch
+
     side_effect = Exception("Mock network download failure")
     with patch("torchvision.datasets.CIFAR10", side_effect=side_effect):
         pipe.ingest()

@@ -50,6 +50,7 @@ def _find_closest_key(key: str, candidates: list[str], max_distance: int = 2) ->
 
     return closest if min_dist <= max_distance else None
 
+
 # Default configuration with all supported keys and their default values.
 DEFAULT_CONFIG: dict[str, Any] = {
     "model": {
@@ -140,6 +141,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "notifications": {
         "webhooks": [],
     },
+    "hpo": {},
 }
 
 # Schema for type validation: maps dotted key paths to (expected_type, min, max, required).
@@ -182,6 +184,7 @@ _SCHEMA: dict[str, tuple] = {
     "compression.pruning_ratio": (float, 0.0, _MAX_PRUNING_RATIO, True),
     "compression.bottleneck_rank_ratio": (float, 0.01, 1.0, True),
     "seed": (int, 0, 2**31 - 1, True),
+    "hpo": (dict, None, None, False),
 }
 
 
