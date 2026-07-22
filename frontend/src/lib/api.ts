@@ -679,6 +679,8 @@ export interface ExperimentExportResponse {
 
 export function exportExperiment(runId: string, format: "csv" | "json" = "csv"): Promise<ExperimentExportResponse> {
   return apiFetch<ExperimentExportResponse>(`/api/v1/experiments/${runId}/export?format=${format}`);
+}
+
 export interface WebhookConfig {
   url: string;
   events: string[];
